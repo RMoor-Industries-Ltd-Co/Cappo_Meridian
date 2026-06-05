@@ -1,14 +1,40 @@
 # Cappo_Meridian
 
-Project management hub for **Apex Meridian Group** (`apex-meridian-group.com`).
+Project management hub for **Apex Meridian Group**.
 A single full-stack app that unifies the team's tooling — **ClickUp**, **Notion**,
 **Google Drive**, and **Gmail** — behind one dashboard and a common API.
+Deployed to the `cappo.` subdomain of the AMG domain.
 
 - **Web app + backend** in one Next.js (App Router) project, TypeScript throughout.
+- **Modular SPA shell** — an icon rail navigates ten business-function modules with
+  client-side transitions, so it feels like a single-page app across many pages.
 - **Connector layer** — each service is an isolated, swappable module implementing
   a shared `Connector` interface.
 - **Unified model** — native objects (tasks, pages, files, messages) are normalized
   into `UnifiedItem`s so the UI treats every source the same way.
+
+## Design
+
+Dark, premium surface with a molten **"poured gold"** accent — AMG brand gold
+cascades from the top of the canvas like liquid metal (`.gold-pour` /
+`.amg-canvas` in [`globals.css`](src/app/globals.css)). Theme tokens (surfaces,
+gold ramp, status colors) are defined as CSS variables and exposed to Tailwind v4
+via `@theme`.
+
+## Modules
+
+The icon rail exposes ten business-operation functions:
+
+`Overview · Marketing · Sales · Research · Inventory · Affiliates · Budget · Operations · Legal · Messages`
+
+- **Overview** — company pulse from the AMG ClickUp space, with a **quarter
+  selector** (Company / Q1–Q4). Defaults to the current quarter and shows a
+  "quarter ends in N days" hint as the next quarter approaches.
+- **Research** — an AI research workspace (Claude-powered, on the roadmap) with a
+  collapsible side rail that tracks project folders, files, and Claude responses.
+- **Messages** — unified inbox from the Gmail connector.
+- **Settings** — integration status + Google OAuth connect.
+- The remaining modules are styled scaffolds wired to fill in from the connectors.
 
 ## Stack
 
@@ -69,15 +95,30 @@ See [`.env.example`](.env.example) for the full list. All credentials are option
 ```
 src/
   app/
-    page.tsx                 # dashboard (connector status + unified feed)
+    layout.tsx               # root: fonts + dark canvas
+    globals.css              # theme tokens + poured-gold treatment
+    (dash)/                  # dashboard shell (sidebar + topbar)
+      layout.tsx
+      page.tsx               # Overview (ClickUp + quarter selector)
+      research/              # AI research workspace (collapsible rail)
+      messages/              # unified inbox
+      settings/              # integrations + Google OAuth
+      marketing/ sales/ inventory/ affiliates/ budget/ operations/ legal/
     api/
       health/                # liveness
       connectors/status/     # connector health
       feed/                  # unified activity feed
       auth/google/           # OAuth start + callback
+  components/
+    brand/Starburst.tsx      # AMG golden mark
+    shell/                   # Sidebar, Topbar, PlaceholderPage
+    ui/                      # Card, Kpi, Sparkline
+    overview/QuarterTabs.tsx
   lib/
     env.ts                   # zod-validated config
     types.ts                 # ConnectorStatus, UnifiedItem domain model
+    nav.ts                   # the ten modules
+    quarters.ts              # fiscal-quarter helpers
     connectors/
       connector.ts           # Connector interface
       clickup.ts notion.ts drive.ts gmail.ts
@@ -93,8 +134,18 @@ src/
 
 ## Roadmap
 
+**AI research (Research module)**
+- [ ] OAuth sign-in so both partners can log in from separate computers, backed by
+      a **shared AMG Claude account** kept separate from personal accounts.
+- [ ] In-app Claude research interface (chat + file upload) on the Research page.
+- [ ] Persist project folders, files, and Claude responses; render them in the
+      collapsible side rail.
+
+**Platform**
+- [ ] Dashboard auth/session (Google Workspace OAuth, gated to the AMG domain).
 - [ ] Persist OAuth tokens + connector config per user (Postgres, encrypted).
+- [ ] Wire each module's KPIs to live connector data (quarter-scoped).
+- [ ] Map ClickUp quarter folders/lists to the Overview quarter selector.
 - [ ] Write operations (create ClickUp tasks, Notion pages, send Gmail).
 - [ ] Background sync + webhooks instead of on-request fetching.
 - [ ] Cross-tool project view (link a ClickUp task ↔ Notion doc ↔ Drive folder).
-- [ ] Auth/session for the dashboard itself.
