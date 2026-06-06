@@ -10,18 +10,18 @@ export async function GET(req: NextRequest) {
   const error = req.nextUrl.searchParams.get("error");
 
   if (error) {
-    return NextResponse.redirect(`${env.APP_BASE_URL}/?google=denied`);
+    return NextResponse.redirect(`${env.APP_BASE_URL}/settings?google=denied`);
   }
   if (!code) {
-    return NextResponse.redirect(`${env.APP_BASE_URL}/?google=missing_code`);
+    return NextResponse.redirect(`${env.APP_BASE_URL}/settings?google=missing_code`);
   }
 
   try {
     const client = createOAuthClient();
     const { tokens } = await client.getToken(code);
     await saveTokens(tokens);
-    return NextResponse.redirect(`${env.APP_BASE_URL}/?google=connected`);
+    return NextResponse.redirect(`${env.APP_BASE_URL}/settings?google=connected`);
   } catch {
-    return NextResponse.redirect(`${env.APP_BASE_URL}/?google=error`);
+    return NextResponse.redirect(`${env.APP_BASE_URL}/settings?google=error`);
   }
 }

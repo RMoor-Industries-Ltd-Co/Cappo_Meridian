@@ -66,7 +66,7 @@ export default async function SettingsPage({
               </p>
               {isGoogle && s.configured && !s.connected && (
                 <a
-                  href="/api/auth/google"
+                  href="/api/connectors/google/authorize"
                   className="text-sm font-medium text-gold hover:underline"
                 >
                   Connect Google →

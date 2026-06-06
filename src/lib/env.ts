@@ -19,13 +19,18 @@ const schema = z.object({
   // Notion — internal integration token (https://www.notion.so/my-integrations)
   NOTION_API_KEY: z.string().optional(),
 
-  // Google (Drive + Gmail) — OAuth 2.0 client
+  // Google (Drive + Gmail) — OAuth 2.0 client.
+  // The same client is reused for app login (Auth.js) and connector
+  // authorization; both redirect URIs must be registered on it.
   GOOGLE_CLIENT_ID: z.string().optional(),
   GOOGLE_CLIENT_SECRET: z.string().optional(),
   GOOGLE_REDIRECT_URI: z
     .string()
     .url()
-    .default("http://localhost:3000/api/auth/google/callback"),
+    .default("http://localhost:3000/api/connectors/google/callback"),
+
+  // Auth.js — session signing secret (generate: `openssl rand -base64 32`)
+  AUTH_SECRET: z.string().optional(),
 });
 
 const parsed = schema.safeParse(process.env);
@@ -40,3 +45,7 @@ export const env = parsed.data;
 
 export const isGoogleConfigured = () =>
   Boolean(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET);
+
+/** App login (Auth.js) is usable only when the OAuth client + secret are set. */
+export const isAuthConfigured = () =>
+  Boolean(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET && env.AUTH_SECRET);

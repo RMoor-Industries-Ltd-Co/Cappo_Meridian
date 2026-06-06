@@ -1,12 +1,20 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
-import { Settings, LifeBuoy } from "lucide-react";
+import { signOut } from "next-auth/react";
+import { Settings, LifeBuoy, LogOut } from "lucide-react";
 import { NAV_ITEMS } from "@/lib/nav";
 import { Starburst } from "@/components/brand/Starburst";
 
-export function Sidebar() {
+interface SidebarUser {
+  name?: string | null;
+  email?: string | null;
+  image?: string | null;
+}
+
+export function Sidebar({ user }: { user?: SidebarUser | null }) {
   const pathname = usePathname();
 
   return (
@@ -57,7 +65,40 @@ export function Sidebar() {
         >
           <Settings size={19} strokeWidth={1.75} />
         </Link>
-        <div className="mt-1 h-8 w-8 rounded-full bg-gradient-to-br from-gold-bright to-gold-deep" />
+
+        {user ? (
+          <div className="group relative mt-1">
+            <button
+              className="block h-8 w-8 overflow-hidden rounded-full ring-1 ring-border-strong"
+              title={user.email ?? user.name ?? "Account"}
+            >
+              {user.image ? (
+                <Image
+                  src={user.image}
+                  alt={user.name ?? "Account"}
+                  width={32}
+                  height={32}
+                  className="h-8 w-8 object-cover"
+                />
+              ) : (
+                <span className="flex h-8 w-8 items-center justify-center bg-gradient-to-br from-gold-bright to-gold-deep text-xs font-semibold text-[#2a1f06]">
+                  {(user.name ?? user.email ?? "?").charAt(0).toUpperCase()}
+                </span>
+              )}
+            </button>
+            <div className="pointer-events-none absolute bottom-0 left-12 z-50 hidden w-48 flex-col gap-2 rounded-lg border border-border bg-panel p-3 group-hover:flex group-hover:pointer-events-auto">
+              <p className="truncate text-xs text-muted">{user.email}</p>
+              <button
+                onClick={() => signOut({ callbackUrl: "/signin" })}
+                className="flex items-center gap-2 rounded-md px-2 py-1.5 text-xs text-fg hover:bg-white/5"
+              >
+                <LogOut size={14} /> Sign out
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="mt-1 h-8 w-8 rounded-full bg-gradient-to-br from-gold-bright to-gold-deep" />
+        )}
       </div>
     </aside>
   );
