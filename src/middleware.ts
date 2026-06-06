@@ -17,6 +17,8 @@ export default auth((req) => {
   const isPublic =
     pathname === "/signin" ||
     pathname.startsWith("/api/auth") ||
+    pathname.startsWith("/icon") ||
+    pathname.startsWith("/apple-icon") ||
     pathname === "/api/health";
 
   if (!req.auth && !isPublic) {
