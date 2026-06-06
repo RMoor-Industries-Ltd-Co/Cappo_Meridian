@@ -10,6 +10,7 @@ import {
   BookText,
   Scale,
   Mail,
+  HardDrive,
   type LucideIcon,
 } from "lucide-react";
 
@@ -32,6 +33,7 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/affiliates", label: "Affiliates", icon: Users, blurb: "Partner network, referrals, and payouts." },
   { href: "/budget", label: "Budget", icon: Wallet, blurb: "Spend, forecasts, and financial health." },
   { href: "/operations", label: "Operations", icon: BookText, blurb: "Process documentation and SOPs." },
+  { href: "/drive", label: "Drive", icon: HardDrive, blurb: "Browse and manage the AMG Google Drive — files & folders." },
   { href: "/legal", label: "Legal", icon: Scale, blurb: "Contracts, compliance, and entity documents." },
   { href: "/messages", label: "Messages", icon: Mail, blurb: "Unified email and team messages." },
 ];

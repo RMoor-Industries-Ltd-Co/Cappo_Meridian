@@ -23,7 +23,8 @@ const TOKEN_PATH =
 
 // Drive read + Gmail read, plus basic profile. Widen as features land.
 export const GOOGLE_SCOPES = [
-  "https://www.googleapis.com/auth/drive.readonly",
+  // Full Drive access so the Drive module can read AND write (CRUD) files.
+  "https://www.googleapis.com/auth/drive",
   "https://www.googleapis.com/auth/gmail.readonly",
   "https://www.googleapis.com/auth/userinfo.email",
   "openid",
