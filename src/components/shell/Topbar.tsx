@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Search, Bell, Plus, ChevronDown, CalendarClock } from "lucide-react";
 import { NAV_ITEMS } from "@/lib/nav";
@@ -34,9 +35,13 @@ export function Topbar() {
           <ChevronDown size={14} />
         </button>
 
-        <button className="flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-panel text-muted hover:text-fg">
+        <Link
+          href="/calendar"
+          title="Calendar"
+          className="flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-panel text-muted hover:text-fg"
+        >
           <CalendarClock size={16} />
-        </button>
+        </Link>
         <button className="flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-panel text-muted hover:text-fg">
           <Bell size={16} />
         </button>

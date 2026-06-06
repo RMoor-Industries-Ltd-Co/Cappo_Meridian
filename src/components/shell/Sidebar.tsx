@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
 import { Settings, LifeBuoy, LogOut } from "lucide-react";
 import { NAV_ITEMS } from "@/lib/nav";
-import { Starburst } from "@/components/brand/Starburst";
+import { AmgMark } from "@/components/brand/AmgLogo";
 
 interface SidebarUser {
   name?: string | null;
@@ -19,8 +19,8 @@ export function Sidebar({ user }: { user?: SidebarUser | null }) {
 
   return (
     <aside className="flex w-16 shrink-0 flex-col items-center gap-1 border-r border-border bg-[var(--bg-elevated)]/60 py-4">
-      <Link href="/" className="mb-4 text-gold" title="Cappo Meridian">
-        <Starburst size={30} />
+      <Link href="/" className="mb-4 text-gold" title="Cappo Meridian · Apex Meridian Group">
+        <AmgMark size={30} />
       </Link>
 
       <nav className="flex flex-1 flex-col items-center gap-1">

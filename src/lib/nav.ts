@@ -1,5 +1,6 @@
 import {
   LayoutDashboard,
+  CalendarDays,
   Megaphone,
   TrendingUp,
   FlaskConical,
@@ -23,6 +24,7 @@ export interface NavItem {
 /** The ten business-operation functions, in rail order. */
 export const NAV_ITEMS: NavItem[] = [
   { href: "/", label: "Overview", icon: LayoutDashboard, blurb: "Company-wide pulse from the AMG ClickUp space, by quarter." },
+  { href: "/calendar", label: "Calendar", icon: CalendarDays, blurb: "Schedule across the team — month, week, and day." },
   { href: "/marketing", label: "Marketing", icon: Megaphone, blurb: "Campaigns, content calendar, and channel performance." },
   { href: "/sales", label: "Sales", icon: TrendingUp, blurb: "Pipeline, deals, and revenue tracking." },
   { href: "/research", label: "Research", icon: FlaskConical, blurb: "AI research workspace — Claude-powered (coming soon)." },

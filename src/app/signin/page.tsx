@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { Starburst } from "@/components/brand/Starburst";
+import { AmgLogo } from "@/components/brand/AmgLogo";
 import { SignInButton } from "@/components/auth/SignInButton";
 import { auth } from "@/auth";
 import { env, isAuthConfigured } from "@/lib/env";
@@ -23,14 +23,10 @@ export default async function SignInPage({
     <main className="amg-canvas flex min-h-screen items-center justify-center px-6">
       <div className="gold-pour" aria-hidden />
       <div className="panel panel-gold relative z-10 flex w-full max-w-sm flex-col items-center gap-6 p-8 text-center">
-        <div className="text-gold">
-          <Starburst size={44} />
-        </div>
+        <AmgLogo />
         <div>
-          <h1 className="text-2xl font-semibold text-fg">Cappo Meridian</h1>
-          <p className="mt-1 text-sm text-subtle">
-            Apex Meridian Group · internal operations
-          </p>
+          <h1 className="text-lg font-semibold text-fg">Cappo Meridian</h1>
+          <p className="mt-1 text-sm text-subtle">Internal operations portal</p>
         </div>
 
         {error && (
