@@ -1,8 +1,32 @@
+import Image from "next/image";
+
 /**
- * AMG brand mark — layered chevron "peaks" recreated as SVG so it scales
- * crisply and inherits color (use `text-gold`). `AmgLogo` is the full lockup
- * with the wordmark; `AmgMark` is just the peaks (for the collapsed rail).
+ * Official AMG brand assets (uploaded to /public).
+ * - `AmgLogo`  — full lockup (peaks + wordmark), for spacious places (sign-in).
+ * - `AmgMark`  — just the peaks (cropped from the lockup), for the compact rail.
  */
+
+const LOGO_SRC = "/AMG-logo_000full.png";
+
+export function AmgLogo({
+  width = 176,
+  className = "",
+}: {
+  width?: number;
+  className?: string;
+}) {
+  return (
+    <Image
+      src={LOGO_SRC}
+      alt="Apex Meridian Group"
+      width={width}
+      height={width}
+      priority
+      className={className}
+    />
+  );
+}
+
 export function AmgMark({
   size = 32,
   className = "",
@@ -10,35 +34,21 @@ export function AmgMark({
   size?: number;
   className?: string;
 }) {
+  // Show only the top ~58% of the square lockup so just the peaks render.
+  const h = Math.round(size * 0.58);
   return (
-    <svg
-      width={size}
-      height={(size * 78) / 100}
-      viewBox="0 0 100 78"
-      className={className}
-      fill="currentColor"
-      aria-hidden
+    <span
+      className={`block overflow-hidden ${className}`}
+      style={{ width: size, height: h }}
+      aria-label="AMG"
     >
-      {/* upper peak */}
-      <path d="M50 4 L95 62 L73 62 L50 26 L27 62 L5 62 Z" />
-      {/* lower echo peak (wider, thinner) */}
-      <path d="M50 30 L99 74 L83 74 L50 44 L17 74 L1 74 Z" />
-    </svg>
-  );
-}
-
-export function AmgLogo({ className = "" }: { className?: string }) {
-  return (
-    <div className={`flex flex-col items-center gap-2 ${className}`}>
-      <AmgMark size={64} className="text-gold" />
-      <div className="flex flex-col items-center leading-none">
-        <span className="text-gradient-gold text-2xl font-extrabold tracking-tight">
-          AMG
-        </span>
-        <span className="mt-1 text-[10px] font-medium uppercase tracking-[0.22em] text-gold/80">
-          Apex Meridian Group
-        </span>
-      </div>
-    </div>
+      <Image
+        src={LOGO_SRC}
+        alt="AMG"
+        width={size}
+        height={size}
+        className="block"
+      />
+    </span>
   );
 }
