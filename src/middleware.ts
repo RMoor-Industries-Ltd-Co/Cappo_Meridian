@@ -10,9 +10,7 @@ import { isAuthConfigured } from "@/lib/env";
  * Once configured (as in production), unauthenticated requests are redirected
  * to /signin.
  */
-export default auth((req) => {
-  if (!isAuthConfigured()) return NextResponse.next();
-
+const protect = auth((req) => {
   const { pathname } = req.nextUrl;
   const isPublic =
     pathname === "/signin" ||
@@ -28,6 +26,13 @@ export default auth((req) => {
   }
   return NextResponse.next();
 });
+
+// Only engage Auth.js when a secret is configured. Evaluating the `auth()`
+// wrapper without a secret throws (MissingSecret) in production, so when
+// unconfigured we fall back to a passthrough and the app stays browsable.
+export default isAuthConfigured()
+  ? protect
+  : () => NextResponse.next();
 
 export const config = {
   // Run on everything except Next internals and static assets.

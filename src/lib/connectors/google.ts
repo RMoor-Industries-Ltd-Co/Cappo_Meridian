@@ -16,7 +16,10 @@ type Credentials = Auth.Credentials;
  * datastore (per-user rows in Postgres, encrypted at rest). See README.
  */
 
-const TOKEN_PATH = path.join(process.cwd(), ".google-tokens.json");
+// Configurable so production can persist tokens on a mounted volume
+// (TOKEN_STORE_PATH=/data/google-tokens.json) instead of the ephemeral cwd.
+const TOKEN_PATH =
+  process.env.TOKEN_STORE_PATH || path.join(process.cwd(), ".google-tokens.json");
 
 // Drive read + Gmail read, plus basic profile. Widen as features land.
 export const GOOGLE_SCOPES = [

@@ -15,6 +15,9 @@ const schema = z.object({
   // ClickUp — personal API token (https://app.clickup.com/settings/apps)
   CLICKUP_API_TOKEN: z.string().optional(),
   CLICKUP_TEAM_ID: z.string().optional(),
+  // Scope tasks/calendar to a single ClickUp Space (the AMG space). When unset,
+  // the whole workspace is used.
+  CLICKUP_SPACE_ID: z.string().optional(),
 
   // Notion — internal integration token (https://www.notion.so/my-integrations)
   NOTION_API_KEY: z.string().optional(),

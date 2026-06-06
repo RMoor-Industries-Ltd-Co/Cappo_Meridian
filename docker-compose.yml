@@ -1,0 +1,33 @@
+# Production stack for the Linode host.
+# `web` is the Next.js app (built from this repo); `caddy` terminates TLS for
+# cappo.apex-meridian-group.com and reverse-proxies to it.
+services:
+  web:
+    build:
+      context: .
+    env_file: .env
+    environment:
+      - TOKEN_STORE_PATH=/data/google-tokens.json
+    volumes:
+      - cappo_data:/data
+    expose:
+      - "3000"
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2-alpine
+    depends_on:
+      - web
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    restart: unless-stopped
+
+volumes:
+  cappo_data:
+  caddy_data:
+  caddy_config:

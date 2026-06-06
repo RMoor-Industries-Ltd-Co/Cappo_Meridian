@@ -1,0 +1,85 @@
+name: CI & Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ── Health checks: typecheck, lint, production build ──────────────────
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Typecheck
+        run: pnpm exec tsc --noEmit
+      - name: Lint
+        run: pnpm lint
+      - name: Build
+        run: pnpm build
+
+  # ── Deploy: ship to the Linode over SSH and rebuild Docker ────────────
+  deploy:
+    needs: checks
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - name: Check deploy secrets
+        id: gate
+        run: |
+          if [ -n "${{ secrets.SSH_PRIVATE_KEY }}" ] && [ -n "${{ secrets.SSH_USER }}" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Deploy skipped — set SSH_USER and SSH_PRIVATE_KEY secrets to enable."
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.gate.outputs.ready == 'true'
+
+      - name: Configure SSH
+        if: steps.gate.outputs.ready == 'true'
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          ssh-keyscan -H "${{ secrets.SSH_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Sync code to server
+        if: steps.gate.outputs.ready == 'true'
+        run: |
+          rsync -az --delete \
+            --exclude '.git' \
+            --exclude 'node_modules' \
+            --exclude '.next' \
+            --exclude '.env*' \
+            --exclude '.google-tokens.json' \
+            -e "ssh -i ~/.ssh/id_deploy" \
+            ./ "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/opt/cappo/"
+
+      - name: Build & restart containers
+        if: steps.gate.outputs.ready == 'true'
+        run: |
+          ssh -i ~/.ssh/id_deploy "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" \
+            "cd /opt/cappo && docker compose up -d --build && docker image prune -f"
+
+      - name: Health check
+        if: steps.gate.outputs.ready == 'true'
+        run: |
+          for i in $(seq 1 12); do
+            if curl -fsS https://cappo.apex-meridian-group.com/api/health; then
+              echo "✅ healthy"; exit 0
+            fi
+            echo "waiting for app/TLS... attempt $i"; sleep 10
+          done
+          echo "❌ health check failed"; exit 1

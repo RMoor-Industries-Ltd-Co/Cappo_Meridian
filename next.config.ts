@@ -1,6 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // Self-contained server build for Docker (.next/standalone).
+  output: "standalone",
   images: {
     remotePatterns: [
       // Google Workspace profile photos

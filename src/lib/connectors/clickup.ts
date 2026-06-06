@@ -58,6 +58,13 @@ export const clickupConnector: Connector = {
       if (!teamId) return [];
     }
 
+    const recentParams = new URLSearchParams({
+      order_by: "updated",
+      reverse: "true",
+      subtasks: "true",
+    });
+    if (env.CLICKUP_SPACE_ID) recentParams.append("space_ids[]", env.CLICKUP_SPACE_ID);
+
     const { tasks } = await clickup<{
       tasks: {
         id: string;
@@ -66,7 +73,7 @@ export const clickupConnector: Connector = {
         status?: { status: string };
         date_updated?: string;
       }[];
-    }>(`/team/${teamId}/task?order_by=updated&reverse=true&subtasks=true`);
+    }>(`/team/${teamId}/task?${recentParams.toString()}`);
 
     return tasks.slice(0, limit).map((t) => ({
       id: t.id,
@@ -130,6 +137,8 @@ export async function clickupCalendarEvents(
     due_date_gt: String(startMs),
     due_date_lt: String(endMs),
   });
+  // Scope to the AMG space when configured.
+  if (env.CLICKUP_SPACE_ID) params.append("space_ids[]", env.CLICKUP_SPACE_ID);
 
   const { tasks } = await clickup<{ tasks: ClickUpTask[] }>(
     `/team/${teamId}/task?${params.toString()}`,
