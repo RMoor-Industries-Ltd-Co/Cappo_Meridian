@@ -9,6 +9,33 @@ export interface CalEvent {
   end: Date;
   color: string; // CSS color
   location?: string;
+  allDay?: boolean;
+  url?: string; // deep link (e.g. back to the ClickUp task)
+}
+
+/** Visible date span for a given view (month shows 6 surrounding weeks). */
+export function visibleRange(view: CalView, cursor: Date): { start: Date; end: Date } {
+  if (view === "month") {
+    const start = startOfWeek(startOfMonth(cursor));
+    return { start, end: addDays(start, 42) };
+  }
+  if (view === "week") {
+    const start = startOfWeek(cursor);
+    return { start, end: addDays(start, 7) };
+  }
+  const start = startOfDay(cursor);
+  return { start, end: addDays(start, 1) };
+}
+
+/** Sample events for the visible range (fallback before ClickUp is connected). */
+export function sampleForView(view: CalView, cursor: Date): CalEvent[] {
+  if (view === "month") {
+    const first = startOfWeek(startOfMonth(cursor));
+    return Array.from({ length: 6 }).flatMap((_, w) =>
+      sampleEvents(addDays(first, w * 7)).map((e) => ({ ...e, id: `${e.id}-${w}` })),
+    );
+  }
+  return sampleEvents(cursor);
 }
 
 export const HOURS = Array.from({ length: 24 }, (_, h) => h);

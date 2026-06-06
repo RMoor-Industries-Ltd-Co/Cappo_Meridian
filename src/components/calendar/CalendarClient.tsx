@@ -21,10 +21,25 @@ import {
   hoursInto,
   isSameDay,
   isSameMonth,
-  sampleEvents,
+  sampleForView,
   startOfMonth,
   startOfWeek,
+  visibleRange,
 } from "@/lib/calendar";
+
+type Source = "clickup" | "sample";
+
+interface ApiEvent {
+  id: string;
+  title: string;
+  start: string;
+  end: string;
+  color: string;
+  status?: string;
+  allDay?: boolean;
+  url?: string;
+  location?: string;
+}
 
 const BASE_ROW = 52; // px per hour at 100% zoom
 const MIN_ZOOM = 0.5;
@@ -72,14 +87,43 @@ export default function CalendarClient() {
     return () => el.removeEventListener("wheel", onWheel);
   }, [view]);
 
-  const events = useMemo(() => {
-    if (view === "month") {
-      const first = startOfWeek(startOfMonth(cursor));
-      return Array.from({ length: 6 }).flatMap((_, w) =>
-        sampleEvents(addDays(first, w * 7)).map((e) => ({ ...e, id: `${e.id}-${w}` })),
-      );
-    }
-    return sampleEvents(cursor);
+  const [events, setEvents] = useState<CalEvent[]>([]);
+  const [source, setSource] = useState<Source>("sample");
+
+  // Load events for the visible range from ClickUp; fall back to a sample
+  // schedule until ClickUp is connected. (Async setState — not flagged by the
+  // synchronous set-state-in-effect rule.)
+  useEffect(() => {
+    const { start, end } = visibleRange(view, cursor);
+    let cancelled = false;
+
+    fetch(`/api/calendar?start=${start.getTime()}&end=${end.getTime()}`)
+      .then((r) => r.json())
+      .then((data: { configured?: boolean; events?: ApiEvent[] }) => {
+        if (cancelled) return;
+        if (data.configured && Array.isArray(data.events)) {
+          setSource("clickup");
+          setEvents(
+            data.events.map((e) => ({
+              ...e,
+              start: new Date(e.start),
+              end: new Date(e.end),
+            })),
+          );
+        } else {
+          setSource("sample");
+          setEvents(sampleForView(view, cursor));
+        }
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setSource("sample");
+        setEvents(sampleForView(view, cursor));
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [view, cursor]);
 
   const go = (dir: number) => {
@@ -198,7 +242,12 @@ export default function CalendarClient() {
       </div>
 
       <p className="text-center text-[11px] text-subtle">
-        Tip: ⌘/Ctrl + scroll to zoom · sample schedule — Google Calendar wiring next.
+        ⌘/Ctrl + scroll to zoom ·{" "}
+        {source === "clickup" ? (
+          <span className="text-gold">Live from the AMG ClickUp space</span>
+        ) : (
+          <>Showing a sample schedule — connect ClickUp to see live tasks</>
+        )}
       </p>
     </div>
   );
@@ -207,6 +256,28 @@ export default function CalendarClient() {
 function weekDays(cursor: Date): Date[] {
   const ws = startOfWeek(cursor);
   return Array.from({ length: 7 }, (_, i) => addDays(ws, i));
+}
+
+/** Colored event chip — links back to the source (e.g. ClickUp) when present. */
+function Chip({ e }: { e: CalEvent }) {
+  const cls = "flex items-center gap-1 truncate rounded px-1 py-0.5";
+  const style = { background: `color-mix(in srgb, ${e.color} 16%, transparent)` };
+  const title = `${e.title}${e.allDay ? "" : ` · ${fmtTime(e.start)}`}`;
+  const inner = (
+    <>
+      <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: e.color }} />
+      <span className="truncate text-fg">{e.title}</span>
+    </>
+  );
+  return e.url ? (
+    <a href={e.url} target="_blank" rel="noreferrer" className={`${cls} hover:brightness-125`} style={style} title={title}>
+      {inner}
+    </a>
+  ) : (
+    <div className={cls} style={style} title={title}>
+      {inner}
+    </div>
+  );
 }
 
 /* ───────────────────────────── Month view ───────────────────────────── */
@@ -261,18 +332,7 @@ function MonthView({
               </div>
               <div className="flex flex-col gap-0.5" style={{ fontSize: fontPx }}>
                 {dayEvents.slice(0, maxChips).map((e) => (
-                  <div
-                    key={e.id}
-                    className="flex items-center gap-1 truncate rounded px-1 py-0.5"
-                    style={{ background: `color-mix(in srgb, ${e.color} 16%, transparent)` }}
-                    title={`${e.title} · ${fmtTime(e.start)}`}
-                  >
-                    <span
-                      className="h-1.5 w-1.5 shrink-0 rounded-full"
-                      style={{ background: e.color }}
-                    />
-                    <span className="truncate text-fg">{e.title}</span>
-                  </div>
+                  <Chip key={e.id} e={e} />
                 ))}
                 {dayEvents.length > maxChips && (
                   <span className="px-1 text-subtle">+{dayEvents.length - maxChips} more</span>
@@ -303,6 +363,7 @@ function TimeGridView({
 }) {
   const gutter = 56;
   const gridHeight = rowHeight * 24;
+  const hasAllDay = events.some((e) => e.allDay);
 
   return (
     <div className="flex h-full flex-col">
@@ -327,6 +388,31 @@ function TimeGridView({
         })}
       </div>
 
+      {/* All-day strip (e.g. ClickUp tasks due that day without a time) */}
+      {hasAllDay && (
+        <div className="flex max-h-24 overflow-y-auto border-b border-border">
+          <div
+            className="flex shrink-0 items-start justify-end pr-2 pt-1 text-[10px] text-subtle"
+            style={{ width: gutter }}
+          >
+            all-day
+          </div>
+          {days.map((day) => {
+            const ad = events.filter((e) => e.allDay && isSameDay(e.start, day));
+            return (
+              <div
+                key={day.toISOString()}
+                className="flex min-w-0 flex-1 flex-col gap-0.5 border-l border-border p-1 text-[11px]"
+              >
+                {ad.map((e) => (
+                  <Chip key={e.id} e={e} />
+                ))}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
       {/* Scrollable time grid */}
       <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto">
         <div className="flex" style={{ height: gridHeight }}>
@@ -346,7 +432,9 @@ function TimeGridView({
           {/* Day columns */}
           {days.map((day) => {
             const today = isSameDay(day, now);
-            const dayEvents = events.filter((e) => isSameDay(e.start, day));
+            const dayEvents = events.filter(
+              (e) => !e.allDay && isSameDay(e.start, day),
+            );
             return (
               <div key={day.toISOString()} className="relative flex-1 border-l border-border">
                 {/* hour lines */}
@@ -365,18 +453,8 @@ function TimeGridView({
                     18,
                     (hoursInto(e.end) - hoursInto(e.start)) * rowHeight - 2,
                   );
-                  return (
-                    <div
-                      key={e.id}
-                      className="absolute inset-x-1 overflow-hidden rounded-md px-1.5 py-0.5"
-                      style={{
-                        top,
-                        height,
-                        background: `color-mix(in srgb, ${e.color} 22%, var(--panel))`,
-                        borderLeft: `3px solid ${e.color}`,
-                      }}
-                      title={`${e.title} · ${fmtTime(e.start)}–${fmtTime(e.end)}`}
-                    >
+                  const block = (
+                    <>
                       <p className="truncate text-xs font-medium text-fg">{e.title}</p>
                       {height > 30 && (
                         <p className="truncate text-[10px] text-muted">
@@ -384,6 +462,32 @@ function TimeGridView({
                           {e.location ? ` · ${e.location}` : ""}
                         </p>
                       )}
+                    </>
+                  );
+                  const cls =
+                    "absolute inset-x-1 overflow-hidden rounded-md px-1.5 py-0.5";
+                  const style = {
+                    top,
+                    height,
+                    background: `color-mix(in srgb, ${e.color} 22%, var(--panel))`,
+                    borderLeft: `3px solid ${e.color}`,
+                  };
+                  const title = `${e.title} · ${fmtTime(e.start)}–${fmtTime(e.end)}`;
+                  return e.url ? (
+                    <a
+                      key={e.id}
+                      href={e.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className={`${cls} hover:brightness-125`}
+                      style={style}
+                      title={title}
+                    >
+                      {block}
+                    </a>
+                  ) : (
+                    <div key={e.id} className={cls} style={style} title={title}>
+                      {block}
                     </div>
                   );
                 })}

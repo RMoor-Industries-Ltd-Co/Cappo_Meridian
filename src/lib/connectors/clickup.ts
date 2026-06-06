@@ -81,3 +81,78 @@ export const clickupConnector: Connector = {
     }));
   },
 };
+
+/** Calendar event shape returned to the client (dates as ISO strings). */
+export interface ClickUpCalEvent {
+  id: string;
+  title: string;
+  start: string;
+  end: string;
+  allDay: boolean;
+  color: string;
+  status?: string;
+  url?: string;
+}
+
+interface ClickUpTask {
+  id: string;
+  name: string;
+  url: string;
+  status?: { status: string; color?: string };
+  start_date?: string | null;
+  due_date?: string | null;
+  due_date_time?: boolean;
+  start_date_time?: boolean;
+}
+
+async function resolveTeamId(): Promise<string | undefined> {
+  if (env.CLICKUP_TEAM_ID) return env.CLICKUP_TEAM_ID;
+  const { teams } = await clickup<{ teams: { id: string }[] }>("/team");
+  return teams[0]?.id;
+}
+
+/**
+ * ClickUp tasks with due dates in [startMs, endMs], mapped to calendar events.
+ * Tasks become the calendar — coloured by their ClickUp status, linking back to
+ * the task. Tasks without a time-of-day are treated as all-day.
+ */
+export async function clickupCalendarEvents(
+  startMs: number,
+  endMs: number,
+): Promise<ClickUpCalEvent[]> {
+  const teamId = await resolveTeamId();
+  if (!teamId) return [];
+
+  const params = new URLSearchParams({
+    include_closed: "true",
+    subtasks: "true",
+    order_by: "due_date",
+    due_date_gt: String(startMs),
+    due_date_lt: String(endMs),
+  });
+
+  const { tasks } = await clickup<{ tasks: ClickUpTask[] }>(
+    `/team/${teamId}/task?${params.toString()}`,
+  );
+
+  return tasks
+    .filter((t) => t.due_date)
+    .map((t) => {
+      const due = new Date(Number(t.due_date));
+      const start = t.start_date ? new Date(Number(t.start_date)) : due;
+      const timed = t.due_date_time === true;
+      const s = start;
+      let e = due;
+      if (s.getTime() >= e.getTime()) e = new Date(s.getTime() + 60 * 60 * 1000);
+      return {
+        id: t.id,
+        title: t.name,
+        start: s.toISOString(),
+        end: e.toISOString(),
+        allDay: !timed,
+        color: t.status?.color || "var(--gold)",
+        status: t.status?.status,
+        url: t.url,
+      };
+    });
+}

@@ -25,6 +25,9 @@ export default function RootLayout({
   return (
     <html
       lang="en"
+      // Browser extensions (e.g. Scribe) inject attributes on <html> before
+      // React hydrates; ignore those to avoid false hydration warnings.
+      suppressHydrationWarning
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full">{children}</body>

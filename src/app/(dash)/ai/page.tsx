@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import {
-  FlaskConical,
   Folder,
   FileText,
   MessageSquare,
@@ -41,7 +40,7 @@ const PROJECTS: ProjectNode[] = [
   },
 ];
 
-export default function ResearchPage() {
+export default function AiPage() {
   const [railOpen, setRailOpen] = useState(true);
   const [openProject, setOpenProject] = useState<string | null>(PROJECTS[0].name);
 
@@ -56,7 +55,7 @@ export default function ResearchPage() {
         <div className="flex items-center justify-between border-b border-border p-3">
           {railOpen && (
             <span className="text-xs font-semibold uppercase tracking-wide text-muted">
-              Research Projects
+              AI Projects
             </span>
           )}
           <button
@@ -122,8 +121,8 @@ export default function ResearchPage() {
       {/* Main research / chat surface */}
       <section className="panel panel-gold relative flex flex-1 flex-col overflow-hidden">
         <div className="flex items-center gap-2 border-b border-border px-5 py-3">
-          <FlaskConical size={18} className="text-gold" />
-          <h1 className="text-sm font-semibold text-fg">Research Workspace</h1>
+          <Sparkles size={18} className="text-gold" />
+          <h1 className="text-sm font-semibold text-fg">AI Workspace</h1>
           <span className="ml-2 rounded-md bg-gold/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-gold">
             Claude · Coming soon
           </span>
