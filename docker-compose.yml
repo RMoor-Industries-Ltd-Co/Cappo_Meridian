@@ -3,8 +3,9 @@
 # cappo.apex-meridian-group.com and reverse-proxies to it.
 services:
   web:
-    build:
-      context: .
+    # Prebuilt image from CI (GitHub Container Registry) — the server pulls,
+    # never builds. For a local build use: docker build -t $IMAGE .
+    image: ghcr.io/piaar/cappo-meridian:latest
     env_file: .env
     environment:
       - TOKEN_STORE_PATH=/data/google-tokens.json

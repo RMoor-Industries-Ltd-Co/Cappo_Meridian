@@ -1,12 +1,16 @@
 # Deploying Cappo_Meridian
 
 CI/CD: push to `main` → GitHub Actions runs **typecheck + lint + build**, then
-**rsyncs the repo to the Linode and rebuilds Docker** (`web` app + `caddy` for
-HTTPS). Caddy auto-provisions a TLS cert for `cappo.apex-meridian-group.com`.
+**builds the Docker image on the runner and pushes it to GHCR**, then SSHes to
+the Linode which **pulls the prebuilt image and restarts** (`web` app + `caddy`
+for HTTPS). The server never builds — keeping its RAM/CPU for serving. Caddy
+auto-provisions a TLS cert for `cappo.apex-meridian-group.com`.
 
 ```
-push main ──▶ checks (tsc/lint/build) ──▶ rsync ▶ docker compose up -d --build ──▶ /api/health
+push main ──▶ checks (tsc/lint/build) ──▶ build image → GHCR ──▶ ssh: docker compose pull && up -d ──▶ /api/health
 ```
+
+Image: `ghcr.io/piaar/cappo-meridian:latest` (+ `:<sha>`).
 
 ## One-time: GitHub repo secrets
 
@@ -15,7 +19,7 @@ Set under **Settings → Secrets and variables → Actions** (or via `gh secret 
 | Secret | Value |
 | --- | --- |
 | `SSH_HOST` | `173.230.138.81` (or `cappo.apex-meridian-group.com`) |
-| `SSH_USER` | the deploy user on the Linode (e.g. `deploy` or `root`) |
+| `SSH_USER` | `amg-deploy` (the CI deploy user on the Linode) |
 | `SSH_PRIVATE_KEY` | private key whose **public** key is in the server's `~/.ssh/authorized_keys` |
 
 Generate a dedicated deploy key (don't reuse a personal key):
@@ -26,7 +30,7 @@ ssh-keygen -t ed25519 -f cappo_deploy -N "" -C "cappo-deploy"
 # add the private key cappo_deploy to GitHub as SSH_PRIVATE_KEY
 gh secret set SSH_PRIVATE_KEY < cappo_deploy
 gh secret set SSH_HOST --body "173.230.138.81"
-gh secret set SSH_USER --body "deploy"
+gh secret set SSH_USER --body "amg-deploy"
 ```
 
 ## One-time: Linode host prep
@@ -82,5 +86,13 @@ Push to `main` (or run the **CI & Deploy** workflow manually). First run may tak
 ## Local container test
 
 ```bash
-docker compose build web && docker compose up   # needs a local .env
+docker build -t ghcr.io/piaar/cappo-meridian:latest .
+docker compose up        # needs a local .env in the same dir
 ```
+
+## Resizing the Linode
+
+Resize is done in the Linode Cloud Manager (not via this repo): **power off →
+Resize → pick the larger plan → boot**. The disk (users, `/opt/cappo/.env`,
+Docker images, swap) persists; no redeploy needed. After boot, `ssh cappo` and
+`docker compose -f /opt/cappo/docker-compose.yml ps` to confirm it came back up.
