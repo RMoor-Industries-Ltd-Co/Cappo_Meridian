@@ -4,14 +4,15 @@ import { type Connector, notConfigured } from "./connector";
 
 const API = "https://api.clickup.com/api/v2";
 
-async function clickup<T>(path: string): Promise<T> {
+async function clickup<T>(path: string, init?: RequestInit): Promise<T> {
   const token = env.CLICKUP_API_TOKEN;
   if (!token) throw new Error("CLICKUP_API_TOKEN not set");
 
   const res = await fetch(`${API}${path}`, {
-    headers: { Authorization: token },
+    headers: { Authorization: token, "Content-Type": "application/json" },
     // ClickUp data changes often; never serve stale.
     cache: "no-store",
+    ...init,
   });
   if (!res.ok) {
     throw new Error(`ClickUp ${path} → ${res.status} ${res.statusText}`);
@@ -219,4 +220,51 @@ export async function clickupTasksByTag(tag: string): Promise<ModuleTask[]> {
       .map((a) => a.username || a.email || "")
       .filter(Boolean),
   }));
+}
+
+/** Resolve the list to create new tasks in — the current quarter's Agenda. */
+async function resolveModuleListId(): Promise<string | undefined> {
+  if (!env.CLICKUP_SPACE_ID) {
+    // No space pinned — fall back to the first list of the first team space.
+    const teamId = await resolveTeamId();
+    if (!teamId) return undefined;
+    const { spaces } = await clickup<{ spaces: { id: string }[] }>(`/team/${teamId}/space`);
+    if (!spaces[0]) return undefined;
+    env.CLICKUP_SPACE_ID = spaces[0].id;
+  }
+  const { folders } = await clickup<{
+    folders: { name: string; lists: { id: string; name: string }[] }[];
+  }>(`/space/${env.CLICKUP_SPACE_ID}/folder?archived=false`);
+
+  const q = `Q${Math.floor(new Date().getMonth() / 3) + 1}`;
+  const folder =
+    folders.find((f) => f.name.trim().toUpperCase() === q) ||
+    folders.find((f) => f.lists?.length);
+  const list = folder?.lists?.find((l) => /agenda/i.test(l.name)) || folder?.lists?.[0];
+  return list?.id;
+}
+
+/** Create a task in the AMG space (current quarter), optionally tagged + due. */
+export async function clickupCreateTask(input: {
+  name: string;
+  tag?: string;
+  dueMs?: number | null;
+}): Promise<{ id: string; url: string }> {
+  const listId = await resolveModuleListId();
+  if (!listId) throw new Error("No AMG list available to create the task in");
+
+  const body: { name: string; tags?: string[]; due_date?: number; due_date_time?: boolean } = {
+    name: input.name,
+  };
+  if (input.tag) body.tags = [input.tag];
+  if (input.dueMs) {
+    body.due_date = input.dueMs;
+    body.due_date_time = false;
+  }
+
+  const task = await clickup<{ id: string; url: string }>(`/list/${listId}/task`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+  return { id: task.id, url: task.url };
 }

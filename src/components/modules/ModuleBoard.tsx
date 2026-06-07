@@ -2,7 +2,7 @@
 
 import { type ReactNode, useEffect, useState } from "react";
 import Link from "next/link";
-import { CircleDot, ExternalLink, RefreshCw } from "lucide-react";
+import { CircleDot, ExternalLink, Plus, RefreshCw, X } from "lucide-react";
 import { Card } from "@/components/ui/Card";
 import { Kpi } from "@/components/ui/Kpi";
 
@@ -45,6 +45,33 @@ export function ModuleBoard({
 }) {
   const [data, setData] = useState<Payload | null>(null);
   const [nonce, setNonce] = useState(0);
+  const [adding, setAdding] = useState(false);
+  const [name, setName] = useState("");
+  const [due, setDue] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function addTask() {
+    if (!name.trim() || busy) return;
+    setBusy(true);
+    try {
+      const res = await fetch("/api/modules", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: name.trim(), tag, due: due || undefined }),
+      });
+      if (!res.ok) {
+        const e = await res.json().catch(() => ({}));
+        alert(e.error || "Could not create task");
+        return;
+      }
+      setName("");
+      setDue("");
+      setAdding(false);
+      setNonce((n) => n + 1); // refresh board
+    } finally {
+      setBusy(false);
+    }
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -88,6 +115,12 @@ export function ModuleBoard({
           <p className="text-sm text-subtle">{blurb}</p>
         </div>
         <button
+          onClick={() => setAdding((v) => !v)}
+          className="flex items-center gap-1.5 rounded-lg btn-gold px-3 py-2 text-sm"
+        >
+          <Plus size={15} /> New task
+        </button>
+        <button
           onClick={() => setNonce((n) => n + 1)}
           className="flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-panel text-subtle hover:text-fg"
           title="Refresh"
@@ -95,6 +128,40 @@ export function ModuleBoard({
           <RefreshCw size={15} className={loading ? "animate-spin" : ""} />
         </button>
       </div>
+
+      {adding && (
+        <Card gold className="flex flex-wrap items-center gap-2 p-3">
+          <input
+            autoFocus
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && addTask()}
+            placeholder={`New #${tag} task…`}
+            className="min-w-0 flex-1 rounded-lg border border-border bg-panel px-3 py-2 text-sm text-fg placeholder:text-subtle focus:outline-none"
+          />
+          <input
+            type="date"
+            value={due}
+            onChange={(e) => setDue(e.target.value)}
+            className="rounded-lg border border-border bg-panel px-3 py-2 text-sm text-muted focus:outline-none"
+            title="Due date (optional)"
+          />
+          <button
+            onClick={addTask}
+            disabled={!name.trim() || busy}
+            className="rounded-lg btn-gold px-4 py-2 text-sm disabled:opacity-50"
+          >
+            {busy ? "Adding…" : "Add to ClickUp"}
+          </button>
+          <button
+            onClick={() => setAdding(false)}
+            className="flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-panel text-subtle hover:text-fg"
+            title="Cancel"
+          >
+            <X size={15} />
+          </button>
+        </Card>
+      )}
 
       <div className="grid grid-cols-3 gap-4">
         <Kpi label="Tasks" value={loading ? "—" : String(tasks.length)} period="tagged" />
