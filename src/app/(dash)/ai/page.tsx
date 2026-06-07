@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import {
   Folder,
   PanelLeftClose,
@@ -241,13 +243,19 @@ export default function AiPage() {
             <div className="mx-auto flex max-w-3xl flex-col gap-4">
               {messages.map((m, i) => (
                 <div key={i} className={m.role === "user" ? "flex justify-end" : "flex justify-start"}>
-                  <div
-                    className={`max-w-[85%] whitespace-pre-wrap rounded-xl px-4 py-2.5 text-sm ${
-                      m.role === "user" ? "bg-gold/15 text-fg" : "border border-border bg-panel text-fg"
-                    }`}
-                  >
-                    {m.content || (streaming && i === messages.length - 1 ? "…" : "")}
-                  </div>
+                  {m.role === "user" ? (
+                    <div className="max-w-[85%] whitespace-pre-wrap rounded-xl bg-gold/15 px-4 py-2.5 text-sm text-fg">
+                      {m.content}
+                    </div>
+                  ) : (
+                    <div className="md max-w-[85%] rounded-xl border border-border bg-panel px-4 py-2.5">
+                      {m.content ? (
+                        <ReactMarkdown remarkPlugins={[remarkGfm]}>{m.content}</ReactMarkdown>
+                      ) : (
+                        streaming && i === messages.length - 1 && <span className="text-subtle">…</span>
+                      )}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
