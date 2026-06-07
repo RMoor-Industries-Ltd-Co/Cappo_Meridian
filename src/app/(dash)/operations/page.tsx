@@ -1,20 +1,13 @@
 import { BookText } from "lucide-react";
-import { PlaceholderPage } from "@/components/shell/PlaceholderPage";
+import { ModuleBoard } from "@/components/modules/ModuleBoard";
 
 export default function OperationsPage() {
   return (
-    <PlaceholderPage
-      icon={BookText}
+    <ModuleBoard
+      tag="operations"
       title="Operations"
-      blurb="Process documentation and SOPs."
-      planned={[
-        "SOP library (Notion / Drive)",
-        "Process owners & reviews",
-        "Onboarding playbooks",
-        "Document version tracking",
-        "Checklists & runbooks",
-        "Search across all docs",
-      ]}
+      blurb="Process, SOPs, and runbooks — AMG ClickUp tasks tagged #operations."
+      icon={BookText}
     />
   );
 }

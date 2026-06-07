@@ -1,20 +1,13 @@
 import { Boxes } from "lucide-react";
-import { PlaceholderPage } from "@/components/shell/PlaceholderPage";
+import { ModuleBoard } from "@/components/modules/ModuleBoard";
 
 export default function InventoryPage() {
   return (
-    <PlaceholderPage
-      icon={Boxes}
+    <ModuleBoard
+      tag="inventory"
       title="Inventory"
-      blurb="Stock levels, SKUs, and supply tracking."
-      planned={[
-        "Stock levels by SKU",
-        "Low-stock alerts",
-        "Supplier & reorder tracking",
-        "Inventory valuation",
-        "Movement history",
-        "Warehouse / location view",
-      ]}
+      blurb="Stock, SKUs, and supply — AMG ClickUp tasks tagged #inventory."
+      icon={Boxes}
     />
   );
 }

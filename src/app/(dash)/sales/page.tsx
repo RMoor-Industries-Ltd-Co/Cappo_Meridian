@@ -1,20 +1,13 @@
 import { TrendingUp } from "lucide-react";
-import { PlaceholderPage } from "@/components/shell/PlaceholderPage";
+import { ModuleBoard } from "@/components/modules/ModuleBoard";
 
 export default function SalesPage() {
   return (
-    <PlaceholderPage
-      icon={TrendingUp}
+    <ModuleBoard
+      tag="sales"
       title="Sales"
-      blurb="Pipeline, deals, and revenue tracking."
-      planned={[
-        "Deal pipeline by stage",
-        "Revenue vs. quarter target",
-        "Win/loss analysis",
-        "Client accounts overview",
-        "Quote & contract status",
-        "Forecast vs. actuals",
-      ]}
+      blurb="Pipeline and deals — AMG ClickUp tasks tagged #sales."
+      icon={TrendingUp}
     />
   );
 }

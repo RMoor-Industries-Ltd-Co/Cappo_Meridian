@@ -1,20 +1,13 @@
 import { Users } from "lucide-react";
-import { PlaceholderPage } from "@/components/shell/PlaceholderPage";
+import { ModuleBoard } from "@/components/modules/ModuleBoard";
 
 export default function AffiliatesPage() {
   return (
-    <PlaceholderPage
-      icon={Users}
+    <ModuleBoard
+      tag="affiliates"
       title="Affiliates"
-      blurb="Partner network, referrals, and payouts."
-      planned={[
-        "Affiliate roster & tiers",
-        "Referral tracking",
-        "Commission & payout ledger",
-        "Top performers leaderboard",
-        "Partner onboarding status",
-        "Link / code performance",
-      ]}
+      blurb="Partners, referrals, and payouts — AMG ClickUp tasks tagged #affiliates."
+      icon={Users}
     />
   );
 }

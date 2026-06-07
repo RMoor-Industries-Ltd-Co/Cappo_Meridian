@@ -1,20 +1,13 @@
 import { Wallet } from "lucide-react";
-import { PlaceholderPage } from "@/components/shell/PlaceholderPage";
+import { ModuleBoard } from "@/components/modules/ModuleBoard";
 
 export default function BudgetPage() {
   return (
-    <PlaceholderPage
-      icon={Wallet}
+    <ModuleBoard
+      tag="budget"
       title="Budget"
-      blurb="Spend, forecasts, and financial health."
-      planned={[
-        "Spend by department",
-        "Budget vs. actual by quarter",
-        "Burn rate & runway",
-        "Upcoming expenses",
-        "Cash-flow projection",
-        "Approval workflow",
-      ]}
+      blurb="Spend, forecasts, and approvals — AMG ClickUp tasks tagged #budget."
+      icon={Wallet}
     />
   );
 }

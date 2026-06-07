@@ -165,3 +165,58 @@ export async function clickupCalendarEvents(
       };
     });
 }
+
+/** A task surfaced in a function module (filtered by tag within the AMG space). */
+export interface ModuleTask {
+  id: string;
+  name: string;
+  url: string;
+  status: string;
+  statusColor: string;
+  statusType: string; // "open" | "custom" | "done" | "closed"
+  due: string | null; // ISO
+  assignees: string[];
+}
+
+interface TaggedTaskRaw {
+  id: string;
+  name: string;
+  url: string;
+  status?: { status: string; color?: string; type?: string };
+  due_date?: string | null;
+  assignees?: { username?: string; email?: string }[];
+}
+
+/**
+ * AMG-space tasks carrying a given tag (the function-module data source).
+ * Returns [] when ClickUp isn't configured or the tag has no tasks.
+ */
+export async function clickupTasksByTag(tag: string): Promise<ModuleTask[]> {
+  const teamId = await resolveTeamId();
+  if (!teamId) return [];
+
+  const params = new URLSearchParams({
+    include_closed: "true",
+    subtasks: "true",
+    order_by: "due_date",
+  });
+  if (env.CLICKUP_SPACE_ID) params.append("space_ids[]", env.CLICKUP_SPACE_ID);
+  params.append("tags[]", tag);
+
+  const { tasks } = await clickup<{ tasks: TaggedTaskRaw[] }>(
+    `/team/${teamId}/task?${params.toString()}`,
+  );
+
+  return tasks.map((t) => ({
+    id: t.id,
+    name: t.name,
+    url: t.url,
+    status: t.status?.status ?? "—",
+    statusColor: t.status?.color ?? "var(--gold)",
+    statusType: t.status?.type ?? "open",
+    due: t.due_date ? new Date(Number(t.due_date)).toISOString() : null,
+    assignees: (t.assignees ?? [])
+      .map((a) => a.username || a.email || "")
+      .filter(Boolean),
+  }));
+}
