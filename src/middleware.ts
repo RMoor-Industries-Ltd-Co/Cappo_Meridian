@@ -15,9 +15,11 @@ const protect = auth((req) => {
   const isPublic =
     pathname === "/signin" ||
     pathname.startsWith("/api/auth") ||
+    pathname.startsWith("/_next") || // build assets + image optimizer
     pathname.startsWith("/icon") ||
     pathname.startsWith("/apple-icon") ||
-    pathname === "/api/health";
+    pathname === "/api/health" ||
+    /\.[a-zA-Z0-9]+$/.test(pathname); // static files in /public (logo .png/.svg, etc.)
 
   if (!req.auth && !isPublic) {
     const url = new URL("/signin", req.nextUrl.origin);
