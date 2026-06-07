@@ -37,6 +37,9 @@ const schema = z.object({
 
   // Anthropic — shared AMG Claude account, powers the AI research module
   ANTHROPIC_API_KEY: z.string().optional(),
+
+  // Postgres — persistence (AI research projects + conversations, etc.)
+  DATABASE_URL: z.string().optional(),
 });
 
 const parsed = schema.safeParse(process.env);
@@ -58,3 +61,6 @@ export const isAuthConfigured = () =>
 
 /** The AI research module is live only when the Anthropic key is set. */
 export const isAiConfigured = () => Boolean(env.ANTHROPIC_API_KEY);
+
+/** Persistence is available only when a database URL is set. */
+export const isDbConfigured = () => Boolean(env.DATABASE_URL);
