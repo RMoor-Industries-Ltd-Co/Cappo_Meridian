@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import Image from "next/image";
+import { useState } from "react";
 import { usePathname } from "next/navigation";
-import { signOut } from "next-auth/react";
 import { Settings, LifeBuoy, LogOut } from "lucide-react";
 import { NAV_ITEMS } from "@/lib/nav";
 import { AmgMark } from "@/components/brand/AmgLogo";
+import { signOutAction } from "@/lib/actions/auth";
 
 interface SidebarUser {
   name?: string | null;
@@ -16,6 +17,7 @@ interface SidebarUser {
 
 export function Sidebar({ user }: { user?: SidebarUser | null }) {
   const pathname = usePathname();
+  const [menuOpen, setMenuOpen] = useState(false);
 
   return (
     <aside className="flex w-16 shrink-0 flex-col items-center gap-1 border-r border-border bg-[var(--bg-elevated)]/60 py-4">
@@ -67,10 +69,13 @@ export function Sidebar({ user }: { user?: SidebarUser | null }) {
         </Link>
 
         {user ? (
-          <div className="group relative mt-1">
+          <div className="relative mt-1">
             <button
+              onClick={() => setMenuOpen((v) => !v)}
               className="block h-8 w-8 overflow-hidden rounded-full ring-1 ring-border-strong"
               title={user.email ?? user.name ?? "Account"}
+              aria-haspopup="menu"
+              aria-expanded={menuOpen}
             >
               {user.image ? (
                 <Image
@@ -86,15 +91,28 @@ export function Sidebar({ user }: { user?: SidebarUser | null }) {
                 </span>
               )}
             </button>
-            <div className="pointer-events-none absolute bottom-0 left-12 z-50 hidden w-48 flex-col gap-2 rounded-lg border border-border bg-panel p-3 group-hover:flex group-hover:pointer-events-auto">
-              <p className="truncate text-xs text-muted">{user.email}</p>
-              <button
-                onClick={() => signOut({ callbackUrl: "/signin" })}
-                className="flex items-center gap-2 rounded-md px-2 py-1.5 text-xs text-fg hover:bg-white/5"
-              >
-                <LogOut size={14} /> Sign out
-              </button>
-            </div>
+
+            {menuOpen && (
+              <>
+                {/* click-away backdrop */}
+                <button
+                  aria-label="Close menu"
+                  onClick={() => setMenuOpen(false)}
+                  className="fixed inset-0 z-40 cursor-default"
+                />
+                <div className="absolute bottom-0 left-12 z-50 flex w-52 flex-col gap-2 rounded-lg border border-border bg-panel p-3 shadow-xl">
+                  <p className="truncate text-xs text-muted">{user.email}</p>
+                  <form action={signOutAction}>
+                    <button
+                      type="submit"
+                      className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs text-fg hover:bg-white/5"
+                    >
+                      <LogOut size={14} /> Sign out
+                    </button>
+                  </form>
+                </div>
+              </>
+            )}
           </div>
         ) : (
           <div className="mt-1 h-8 w-8 rounded-full bg-gradient-to-br from-gold-bright to-gold-deep" />
