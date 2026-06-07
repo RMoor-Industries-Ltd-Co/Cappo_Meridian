@@ -34,6 +34,9 @@ const schema = z.object({
 
   // Auth.js — session signing secret (generate: `openssl rand -base64 32`)
   AUTH_SECRET: z.string().optional(),
+
+  // Anthropic — shared AMG Claude account, powers the AI research module
+  ANTHROPIC_API_KEY: z.string().optional(),
 });
 
 const parsed = schema.safeParse(process.env);
@@ -52,3 +55,6 @@ export const isGoogleConfigured = () =>
 /** App login (Auth.js) is usable only when the OAuth client + secret are set. */
 export const isAuthConfigured = () =>
   Boolean(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET && env.AUTH_SECRET);
+
+/** The AI research module is live only when the Anthropic key is set. */
+export const isAiConfigured = () => Boolean(env.ANTHROPIC_API_KEY);

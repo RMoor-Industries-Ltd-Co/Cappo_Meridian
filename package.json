@@ -10,6 +10,7 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.102.0",
     "@notionhq/client": "^5.22.0",
     "googleapis": "^173.0.0",
     "lucide-react": "^1.17.0",
