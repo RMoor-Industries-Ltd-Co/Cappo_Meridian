@@ -7,7 +7,7 @@ export default function MarketingPage() {
       tag="marketing"
       title="Marketing"
       blurb="Campaigns, content, and channels — AMG ClickUp tasks tagged #marketing."
-      icon={Megaphone}
+      icon={<Megaphone size={22} strokeWidth={1.75} />}
     />
   );
 }

@@ -7,7 +7,7 @@ export default function OperationsPage() {
       tag="operations"
       title="Operations"
       blurb="Process, SOPs, and runbooks — AMG ClickUp tasks tagged #operations."
-      icon={BookText}
+      icon={<BookText size={22} strokeWidth={1.75} />}
     />
   );
 }

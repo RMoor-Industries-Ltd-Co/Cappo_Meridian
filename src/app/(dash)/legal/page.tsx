@@ -7,7 +7,7 @@ export default function LegalPage() {
       tag="legal"
       title="Legal"
       blurb="Contracts, IP, and compliance — AMG ClickUp tasks tagged #legal."
-      icon={Scale}
+      icon={<Scale size={22} strokeWidth={1.75} />}
     />
   );
 }

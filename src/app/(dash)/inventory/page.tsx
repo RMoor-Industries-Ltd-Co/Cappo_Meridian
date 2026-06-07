@@ -7,7 +7,7 @@ export default function InventoryPage() {
       tag="inventory"
       title="Inventory"
       blurb="Stock, SKUs, and supply — AMG ClickUp tasks tagged #inventory."
-      icon={Boxes}
+      icon={<Boxes size={22} strokeWidth={1.75} />}
     />
   );
 }

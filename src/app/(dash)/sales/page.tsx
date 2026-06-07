@@ -7,7 +7,7 @@ export default function SalesPage() {
       tag="sales"
       title="Sales"
       blurb="Pipeline and deals — AMG ClickUp tasks tagged #sales."
-      icon={TrendingUp}
+      icon={<TrendingUp size={22} strokeWidth={1.75} />}
     />
   );
 }

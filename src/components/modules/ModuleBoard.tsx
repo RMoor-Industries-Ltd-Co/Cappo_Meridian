@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import Link from "next/link";
-import { type LucideIcon, CircleDot, ExternalLink, RefreshCw } from "lucide-react";
+import { CircleDot, ExternalLink, RefreshCw } from "lucide-react";
 import { Card } from "@/components/ui/Card";
 import { Kpi } from "@/components/ui/Kpi";
 
@@ -36,12 +36,12 @@ export function ModuleBoard({
   tag,
   title,
   blurb,
-  icon: Icon,
+  icon,
 }: {
   tag: string;
   title: string;
   blurb: string;
-  icon: LucideIcon;
+  icon: ReactNode;
 }) {
   const [data, setData] = useState<Payload | null>(null);
   const [nonce, setNonce] = useState(0);
@@ -81,7 +81,7 @@ export function ModuleBoard({
     <div className="flex flex-col gap-6 pt-2">
       <div className="flex items-center gap-3">
         <span className="flex h-11 w-11 items-center justify-center rounded-xl border border-border-strong bg-panel text-gold">
-          <Icon size={22} strokeWidth={1.75} />
+          {icon}
         </span>
         <div className="flex-1">
           <h1 className="text-2xl font-semibold text-fg">{title}</h1>

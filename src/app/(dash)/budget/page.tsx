@@ -7,7 +7,7 @@ export default function BudgetPage() {
       tag="budget"
       title="Budget"
       blurb="Spend, forecasts, and approvals — AMG ClickUp tasks tagged #budget."
-      icon={Wallet}
+      icon={<Wallet size={22} strokeWidth={1.75} />}
     />
   );
 }
