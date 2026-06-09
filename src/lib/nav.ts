@@ -32,7 +32,7 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/inventory", label: "Inventory", icon: Boxes, blurb: "Stock levels, SKUs, and supply tracking." },
   { href: "/affiliates", label: "Affiliates", icon: Users, blurb: "Partner network, referrals, and payouts." },
   { href: "/budget", label: "Budget", icon: Wallet, blurb: "Spend, forecasts, and financial health." },
-  { href: "/operations", label: "Operations", icon: BookText, blurb: "Process documentation and SOPs." },
+  { href: "/operations", label: "Operations", icon: BookText, blurb: "Live AMG structure, current work swim lanes, and meeting notes." },
   { href: "/drive", label: "Drive", icon: HardDrive, blurb: "Browse and manage the AMG Google Drive — files & folders." },
   { href: "/legal", label: "Legal", icon: Scale, blurb: "Contracts, compliance, and entity documents." },
   { href: "/messages", label: "Messages", icon: Mail, blurb: "Unified email and team messages." },
