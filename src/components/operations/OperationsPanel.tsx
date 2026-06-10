@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { Card, SectionTitle } from "@/components/ui/Card";
 import { Kpi } from "@/components/ui/Kpi";
+import { WikiQuickAdd } from "@/components/wiki/WikiQuickAdd";
 
 interface BoardTask {
   id: string;
@@ -126,6 +127,8 @@ export function OperationsPanel() {
           <RefreshCw size={15} className={loading ? "animate-spin" : ""} />
         </button>
       </div>
+
+      <WikiQuickAdd onAdded={() => setNonce((n) => n + 1)} />
 
       {/* KPIs */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">

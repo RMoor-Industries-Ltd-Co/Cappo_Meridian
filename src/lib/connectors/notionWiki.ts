@@ -41,18 +41,23 @@ const dateOf = (r: NRow, key: string) => r.properties[key]?.date?.start ?? null;
 const urlOf = (r: NRow, key: string) => r.properties[key]?.url ?? null;
 const relOf = (r: NRow, key: string) => r.properties[key]?.relation ?? [];
 
+type QueryArgs = Parameters<Client["dataSources"]["query"]>[0];
+
 async function query(
   dataSourceId: string,
   opts: {
     page_size?: number;
     sorts?: { property: string; direction: "ascending" | "descending" }[];
+    filter?: Record<string, unknown>;
   } = {},
 ): Promise<NRow[]> {
-  const res = await getClient().dataSources.query({
+  const args: Record<string, unknown> = {
     data_source_id: dataSourceId,
     page_size: opts.page_size ?? 50,
-    ...(opts.sorts ? { sorts: opts.sorts } : {}),
-  });
+  };
+  if (opts.sorts) args.sorts = opts.sorts;
+  if (opts.filter) args.filter = opts.filter;
+  const res = await getClient().dataSources.query(args as QueryArgs);
   return res.results as unknown as NRow[];
 }
 
@@ -143,4 +148,108 @@ export async function getRecentActions(limit = 6): Promise<WikiItem[]> {
     meta: [selOf(r, "Status"), textOf(r, "Owner")].filter(Boolean).join(" · "),
     url: r.url ?? "",
   }));
+}
+
+export interface TagOption { id: string; name: string }
+
+/** Brand + Domain options for entry-form selects (relation targets). */
+export async function getTagOptions(): Promise<{ brands: TagOption[]; domains: TagOption[] }> {
+  const [bu, dom] = await Promise.all([
+    query(NOTION_DS.bu, { page_size: 100 }),
+    query(NOTION_DS.domains, { page_size: 100 }),
+  ]);
+  return {
+    brands: bu.map((r) => ({ id: r.id, name: titleOf(r, "Name") })).filter((x) => x.name),
+    domains: dom.map((r) => ({ id: r.id, name: titleOf(r, "Name") })).filter((x) => x.name),
+  };
+}
+
+export interface DomainBundle {
+  catalog: WikiItem[];
+  documents: WikiItem[];
+  decisions: WikiItem[];
+  actions: WikiItem[];
+  captures: WikiItem[];
+  glossary: WikiItem[];
+}
+
+/** All wiki records tagged with a given Domain — the cross-tool view for a module. */
+export async function getDomainBundle(domainName: string): Promise<DomainBundle> {
+  const empty: DomainBundle = { catalog: [], documents: [], decisions: [], actions: [], captures: [], glossary: [] };
+  const dom = await query(NOTION_DS.domains, { page_size: 100 });
+  const d = dom.find((r) => titleOf(r, "Name").toLowerCase() === domainName.toLowerCase());
+  if (!d) return empty;
+
+  const f = { filter: { property: "Domain", relation: { contains: d.id } }, page_size: 12 };
+  const [catalog, documents, decisions, actions, captures, glossary] = await Promise.all([
+    query(NOTION_DS.catalog, f),
+    query(NOTION_DS.documents, f),
+    query(NOTION_DS.decisions, f),
+    query(NOTION_DS.actions, f),
+    query(NOTION_DS.capture, f),
+    query(NOTION_DS.glossary, f),
+  ]);
+  const item = (r: NRow, titleKey: string, meta = ""): WikiItem => ({
+    id: r.id,
+    title: titleOf(r, titleKey) || "Untitled",
+    meta,
+    url: r.url ?? "",
+  });
+  return {
+    catalog: catalog.map((r) => item(r, "Name", [selOf(r, "Category"), selOf(r, "Status")].filter(Boolean).join(" · "))),
+    documents: documents.map((r) => item(r, "Title", selOf(r, "Doc Type"))),
+    decisions: decisions.map((r) => item(r, "Decision", selOf(r, "Status"))),
+    actions: actions.map((r) => item(r, "Action", selOf(r, "Status"))),
+    captures: captures.map((r) => item(r, "Title", [selOf(r, "Type"), selOf(r, "Status")].filter(Boolean).join(" · "))),
+    glossary: glossary.map((r) => item(r, "Term")),
+  };
+}
+
+type CreateArgs = Parameters<Client["pages"]["create"]>[0];
+
+/** Create a Capture / Ideas inbox entry (the dashboard "+ New Entry" target). */
+export async function createCapture(input: {
+  title: string;
+  type?: string;
+  domainId?: string;
+  brandId?: string;
+  notes?: string;
+}): Promise<void> {
+  const props: Record<string, unknown> = {
+    Title: { title: [{ text: { content: input.title } }] },
+    Status: { select: { name: "Inbox" } },
+  };
+  if (input.type) props.Type = { select: { name: input.type } };
+  if (input.domainId) props.Domain = { relation: [{ id: input.domainId }] };
+  if (input.brandId) props.Brand = { relation: [{ id: input.brandId }] };
+  if (input.notes) props.Notes = { rich_text: [{ text: { content: input.notes } }] };
+  await getClient().pages.create({
+    parent: { type: "data_source_id", data_source_id: NOTION_DS.capture },
+    properties: props,
+  } as CreateArgs);
+}
+
+/** Create a Meeting Notes row (single index across Fathom / Gemini / ClickUp / Notion). */
+export async function createMeetingNote(input: {
+  title: string;
+  date?: string;
+  source?: string;
+  link?: string;
+  summary?: string;
+  domainId?: string;
+  brandId?: string;
+}): Promise<void> {
+  const props: Record<string, unknown> = {
+    Title: { title: [{ text: { content: input.title } }] },
+  };
+  if (input.date) props.Date = { date: { start: input.date } };
+  if (input.source) props.Source = { select: { name: input.source } };
+  if (input.link) props["Source Link"] = { url: input.link };
+  if (input.summary) props.Summary = { rich_text: [{ text: { content: input.summary } }] };
+  if (input.domainId) props.Domain = { relation: [{ id: input.domainId }] };
+  if (input.brandId) props.Brand = { relation: [{ id: input.brandId }] };
+  await getClient().pages.create({
+    parent: { type: "data_source_id", data_source_id: NOTION_DS.meetings },
+    properties: props,
+  } as CreateArgs);
 }

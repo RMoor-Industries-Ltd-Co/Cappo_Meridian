@@ -1,12 +1,11 @@
 import { Megaphone } from "lucide-react";
-import { ModuleBoard } from "@/components/modules/ModuleBoard";
+import { DomainModule } from "@/components/modules/DomainModule";
 
 export default function MarketingPage() {
   return (
-    <ModuleBoard
-      tag="marketing"
-      title="Marketing"
-      blurb="Campaigns, content, and channels — AMG ClickUp tasks tagged #marketing."
+    <DomainModule
+      domain="Marketing"
+      blurb="Campaigns, content, and channels — ClickUp #marketing + Notion records."
       icon={<Megaphone size={22} strokeWidth={1.75} />}
     />
   );

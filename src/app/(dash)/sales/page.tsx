@@ -1,12 +1,11 @@
 import { TrendingUp } from "lucide-react";
-import { ModuleBoard } from "@/components/modules/ModuleBoard";
+import { DomainModule } from "@/components/modules/DomainModule";
 
 export default function SalesPage() {
   return (
-    <ModuleBoard
-      tag="sales"
-      title="Sales"
-      blurb="Pipeline and deals — AMG ClickUp tasks tagged #sales."
+    <DomainModule
+      domain="Sales"
+      blurb="Pipeline and deals — ClickUp #sales + Notion records."
       icon={<TrendingUp size={22} strokeWidth={1.75} />}
     />
   );

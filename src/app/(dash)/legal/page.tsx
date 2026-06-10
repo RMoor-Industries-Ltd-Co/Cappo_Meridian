@@ -1,12 +1,11 @@
 import { Scale } from "lucide-react";
-import { ModuleBoard } from "@/components/modules/ModuleBoard";
+import { DomainModule } from "@/components/modules/DomainModule";
 
 export default function LegalPage() {
   return (
-    <ModuleBoard
-      tag="legal"
-      title="Legal"
-      blurb="Contracts, IP, and compliance — AMG ClickUp tasks tagged #legal."
+    <DomainModule
+      domain="Legal"
+      blurb="Contracts, IP, and compliance — ClickUp #legal + Notion records."
       icon={<Scale size={22} strokeWidth={1.75} />}
     />
   );
