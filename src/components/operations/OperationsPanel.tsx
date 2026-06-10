@@ -96,10 +96,13 @@ export function OperationsPanel() {
   const domains = data?.structure.domains ?? [];
   const meetings = data?.meetings ?? [];
 
-  const lanes = board.statuses.map((s) => ({
-    status: s,
-    items: board.tasks.filter((t) => t.status === s.name),
-  }));
+  const isDoneStatus = (name: string, type: string) =>
+    type === "done" || type === "closed" || /done|complete|closed/i.test(name);
+  const lanes = board.statuses
+    .map((s) => ({ status: s, items: board.tasks.filter((t) => t.status === s.name) }))
+    .filter((l) => !isDoneStatus(l.status.name, l.status.type));
+  const activeCount = lanes.reduce((n, l) => n + l.items.length, 0);
+  const doneCount = board.tasks.length - activeCount;
   const statusNames = board.statuses.map((s) => s.name);
 
   return (
@@ -127,7 +130,7 @@ export function OperationsPanel() {
       {/* KPIs */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <Kpi label="Business Units" value={loading ? "—" : String(units.length)} period="AMG tree" />
-        <Kpi label="Active Tasks" value={loading ? "—" : String(board.tasks.length)} period="ClickUp" />
+        <Kpi label="Active Tasks" value={loading ? "—" : String(activeCount)} period="ClickUp" />
         <Kpi label="Capture Inbox" value={loading ? "—" : String(data?.captures.length ?? 0)} period="ideas" />
         <Kpi label="Meeting Notes" value={loading ? "—" : String(meetings.length)} period="recent" />
       </div>
@@ -146,13 +149,17 @@ export function OperationsPanel() {
         <Card className="col-span-1 flex flex-col p-5 xl:col-span-2">
           <SectionTitle
             title="Swim Lanes · AMG ClickUp"
-            action={<span className="text-xs text-subtle">{board.tasks.length} active</span>}
+            action={
+              <span className="text-xs text-subtle">
+                {activeCount} active{doneCount > 0 ? ` · ${doneCount} done (hidden)` : ""}
+              </span>
+            }
           />
           {loading ? (
             <p className="py-8 text-center text-sm text-subtle">Loading…</p>
-          ) : board.tasks.length === 0 ? (
+          ) : activeCount === 0 ? (
             <p className="py-8 text-center text-sm text-subtle">
-              No active tasks in the AMG space.
+              No active tasks in the AMG space.{doneCount > 0 ? ` (${doneCount} completed)` : ""}
             </p>
           ) : (
             <div className="flex flex-col gap-4">
