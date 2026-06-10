@@ -38,6 +38,10 @@ const schema = z.object({
   // Anthropic — shared AMG Claude account, powers the AI research module
   ANTHROPIC_API_KEY: z.string().optional(),
 
+  // OpenAI — optional second AI provider on the AI page (model switcher)
+  OPENAI_API_KEY: z.string().optional(),
+  OPENAI_MODEL: z.string().optional(),
+
   // Postgres — persistence (AI research projects + conversations, etc.)
   DATABASE_URL: z.string().optional(),
 });
@@ -59,8 +63,9 @@ export const isGoogleConfigured = () =>
 export const isAuthConfigured = () =>
   Boolean(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET && env.AUTH_SECRET);
 
-/** The AI research module is live only when the Anthropic key is set. */
-export const isAiConfigured = () => Boolean(env.ANTHROPIC_API_KEY);
+/** The AI research module is live when at least one AI provider is configured. */
+export const isAiConfigured = () =>
+  Boolean(env.ANTHROPIC_API_KEY || env.OPENAI_API_KEY);
 
 /** Persistence is available only when a database URL is set. */
 export const isDbConfigured = () => Boolean(env.DATABASE_URL);

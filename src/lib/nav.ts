@@ -28,7 +28,7 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/calendar", label: "Calendar", icon: CalendarDays, blurb: "Schedule across the team — month, week, and day." },
   { href: "/marketing", label: "Marketing", icon: Megaphone, blurb: "Campaigns, content calendar, and channel performance." },
   { href: "/sales", label: "Sales", icon: TrendingUp, blurb: "Pipeline, deals, and revenue tracking." },
-  { href: "/ai", label: "AI", icon: Sparkles, blurb: "Claude-powered AI workspace — research & ClickUp control (coming soon)." },
+  { href: "/ai", label: "AI", icon: Sparkles, blurb: "AI research workspace — switch between Claude and GPT." },
   { href: "/inventory", label: "Inventory", icon: Boxes, blurb: "Stock levels, SKUs, and supply tracking." },
   { href: "/affiliates", label: "Affiliates", icon: Users, blurb: "Partner network, referrals, and payouts." },
   { href: "/budget", label: "Budget", icon: Wallet, blurb: "Spend, forecasts, and financial health." },
