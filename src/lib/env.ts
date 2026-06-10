@@ -42,6 +42,13 @@ const schema = z.object({
   OPENAI_API_KEY: z.string().optional(),
   OPENAI_MODEL: z.string().optional(),
 
+  // Base44 superagent — an HTTPS endpoint (a Base44 backend function) the AI
+  // page can POST to. Base44 has no external API-key invocation, so this is the
+  // bridge. URL enables the provider; token + model are optional.
+  BASE44_AGENT_URL: z.string().optional(),
+  BASE44_AGENT_TOKEN: z.string().optional(),
+  BASE44_AGENT_MODEL: z.string().optional(),
+
   // Postgres — persistence (AI research projects + conversations, etc.)
   DATABASE_URL: z.string().optional(),
 });
@@ -65,7 +72,7 @@ export const isAuthConfigured = () =>
 
 /** The AI research module is live when at least one AI provider is configured. */
 export const isAiConfigured = () =>
-  Boolean(env.ANTHROPIC_API_KEY || env.OPENAI_API_KEY);
+  Boolean(env.ANTHROPIC_API_KEY || env.OPENAI_API_KEY || env.BASE44_AGENT_URL);
 
 /** Persistence is available only when a database URL is set. */
 export const isDbConfigured = () => Boolean(env.DATABASE_URL);

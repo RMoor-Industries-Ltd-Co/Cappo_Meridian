@@ -19,11 +19,13 @@ export interface ChatMessage {
   content: string;
 }
 
-/** A switchable AI backend (Claude, GPT, …) exposed on the AI page. */
+/** A switchable AI backend (Claude, GPT, Base44 superagent, …) on the AI page. */
 export interface AiProvider {
   id: string;
   label: string;
   model: string;
+  /** Env var the user must set to enable this provider (shown when unconfigured). */
+  envHint: string;
   isConfigured(): boolean;
   /** Stream a completion, invoking onDelta for each text chunk. */
   streamChat(messages: ChatMessage[], onDelta: (text: string) => void): Promise<void>;
@@ -37,6 +39,7 @@ const claudeProvider: AiProvider = {
   id: "claude",
   label: "Claude",
   model: CLAUDE_MODEL,
+  envHint: "ANTHROPIC_API_KEY",
   isConfigured: () => Boolean(env.ANTHROPIC_API_KEY),
   async streamChat(messages, onDelta) {
     if (!anthropic) anthropic = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
@@ -60,6 +63,7 @@ const openaiProvider: AiProvider = {
   id: "openai",
   label: "GPT (OpenAI)",
   model: OPENAI_MODEL,
+  envHint: "OPENAI_API_KEY",
   isConfigured: () => Boolean(env.OPENAI_API_KEY),
   async streamChat(messages, onDelta) {
     if (!openai) openai = new OpenAI({ apiKey: env.OPENAI_API_KEY });
@@ -78,7 +82,57 @@ const openaiProvider: AiProvider = {
   },
 };
 
-export const aiProviders: AiProvider[] = [claudeProvider, openaiProvider];
+// ── Base44 superagent (HTTPS endpoint bridge) ────────────────────
+// Base44 has no external API-key invocation, so the user exposes their
+// superagent as a Base44 backend function (service role) at an HTTPS URL.
+// Contract — POST { system, messages: [{role,content}] } with optional
+// `Authorization: Bearer <token>`; respond with either streamed text
+// (Content-Type text/plain) or JSON { text: "..." }.
+const base44Provider: AiProvider = {
+  id: "base44",
+  label: "Base44 Superagent",
+  model: env.BASE44_AGENT_MODEL || "superagent",
+  envHint: "BASE44_AGENT_URL",
+  isConfigured: () => Boolean(env.BASE44_AGENT_URL),
+  async streamChat(messages, onDelta) {
+    const res = await fetch(env.BASE44_AGENT_URL as string, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(env.BASE44_AGENT_TOKEN ? { Authorization: `Bearer ${env.BASE44_AGENT_TOKEN}` } : {}),
+      },
+      body: JSON.stringify({
+        system: AI_SYSTEM_PROMPT,
+        messages: messages.map((m) => ({ role: m.role, content: m.content })),
+      }),
+    });
+    if (!res.ok) {
+      const detail = await res.text().catch(() => "");
+      throw new Error(`Base44 agent ${res.status}: ${detail.slice(0, 200) || res.statusText}`);
+    }
+
+    const ctype = res.headers.get("content-type") ?? "";
+    if (res.body && (ctype.includes("text/plain") || ctype.includes("text/event-stream"))) {
+      const reader = res.body.getReader();
+      const dec = new TextDecoder();
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        onDelta(dec.decode(value, { stream: true }));
+      }
+      return;
+    }
+
+    // JSON response — surface the first text-bearing field.
+    const data = (await res.json().catch(() => null)) as Record<string, unknown> | null;
+    const text =
+      data &&
+      (data.text ?? data.reply ?? data.response ?? data.output ?? data.content ?? data.message);
+    onDelta(typeof text === "string" ? text : text ? JSON.stringify(text) : "(empty response)");
+  },
+};
+
+export const aiProviders: AiProvider[] = [claudeProvider, base44Provider, openaiProvider];
 export const defaultProviderId = "claude";
 
 /** Resolve a provider by id, falling back to the default (then any configured). */

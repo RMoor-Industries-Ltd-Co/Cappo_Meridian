@@ -16,9 +16,8 @@ export async function POST(req: NextRequest) {
   const provider = getProvider(typeof body?.provider === "string" ? body.provider : undefined);
 
   if (!provider.isConfigured()) {
-    const key = provider.id === "openai" ? "OPENAI_API_KEY" : "ANTHROPIC_API_KEY";
     return NextResponse.json(
-      { error: `${provider.label} is not configured (set ${key}).` },
+      { error: `${provider.label} is not configured (set ${provider.envHint}).` },
       { status: 503 },
     );
   }
