@@ -22,11 +22,16 @@ interface ChatMessage {
   role: "user" | "assistant";
   content: string;
 }
+interface ModelOpt {
+  id: string;
+  label: string;
+}
 interface ProviderOpt {
   id: string;
   label: string;
   model: string;
   configured: boolean;
+  models: ModelOpt[];
 }
 
 const SUGGESTIONS = [
@@ -45,11 +50,13 @@ export default function AiPage() {
   const [streaming, setStreaming] = useState(false);
   const [providers, setProviders] = useState<ProviderOpt[]>([]);
   const [provider, setProvider] = useState("claude");
+  const [model, setModel] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  const activeLabel = providers.find((p) => p.id === provider)?.label ?? "Claude";
+  const activeProvider = providers.find((p) => p.id === provider);
+  const activeLabel = activeProvider?.label ?? "Claude";
 
-  // Load the available AI providers (Claude / GPT / …) for the selector.
+  // Load the available AI providers (Claude / Perplexity / GPT) for the selector.
   useEffect(() => {
     fetch("/api/ai/providers")
       .then((r) => r.json())
@@ -57,10 +64,19 @@ export default function AiPage() {
         const list = d.providers ?? [];
         setProviders(list);
         const pick = list.find((p) => p.configured) ?? list.find((p) => p.id === d.default) ?? list[0];
-        if (pick) setProvider(pick.id);
+        if (pick) {
+          setProvider(pick.id);
+          setModel(pick.model);
+        }
       })
       .catch(() => {});
   }, []);
+
+  // Switch provider and reset to that provider's default model.
+  function changeProvider(id: string) {
+    setProvider(id);
+    setModel(providers.find((p) => p.id === id)?.model ?? "");
+  }
 
   // Load projects on mount (async — only sets state after the fetch resolves).
   useEffect(() => {
@@ -153,7 +169,7 @@ export default function AiPage() {
       const res = await fetch("/api/ai/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: next, projectId: pid, provider }),
+        body: JSON.stringify({ messages: next, projectId: pid, provider, model }),
       });
       if (!res.ok || !res.body) {
         const e = await res.json().catch(() => ({}));
@@ -239,10 +255,10 @@ export default function AiPage() {
             {activeId ? projects.find((p) => p.id === activeId)?.name ?? "AI Workspace" : "AI Workspace"}
           </h1>
           <div className="ml-auto flex items-center gap-2">
-            <span className="text-[10px] uppercase tracking-wide text-subtle">Model</span>
+            <span className="text-[10px] uppercase tracking-wide text-subtle">AI</span>
             <select
               value={provider}
-              onChange={(e) => setProvider(e.target.value)}
+              onChange={(e) => changeProvider(e.target.value)}
               className="rounded-md border border-border-strong bg-panel px-2 py-1 text-xs font-medium text-gold focus:outline-none"
               title="Switch AI provider"
             >
@@ -253,6 +269,18 @@ export default function AiPage() {
                 </option>
               ))}
             </select>
+            {activeProvider && activeProvider.models.length > 0 && (
+              <select
+                value={model}
+                onChange={(e) => setModel(e.target.value)}
+                className="rounded-md border border-border bg-panel px-2 py-1 text-xs text-muted focus:outline-none"
+                title="Switch model"
+              >
+                {activeProvider.models.map((m) => (
+                  <option key={m.id} value={m.id}>{m.label}</option>
+                ))}
+              </select>
+            )}
           </div>
         </div>
 

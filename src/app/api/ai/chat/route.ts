@@ -1,5 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server";
-import { type ChatMessage, getProvider } from "@/lib/ai";
+import { type ChatMessage, getProvider, resolveModel } from "@/lib/ai";
 import { addMessage } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
@@ -14,6 +14,7 @@ export async function POST(req: NextRequest) {
   const messages = (body?.messages ?? []) as ChatMessage[];
   const projectId = typeof body?.projectId === "string" ? body.projectId : null;
   const provider = getProvider(typeof body?.provider === "string" ? body.provider : undefined);
+  const model = resolveModel(provider, typeof body?.model === "string" ? body.model : undefined);
 
   if (!provider.isConfigured()) {
     return NextResponse.json(
@@ -42,10 +43,14 @@ export async function POST(req: NextRequest) {
     async start(controller) {
       try {
         let full = "";
-        await provider.streamChat(recent, (delta) => {
-          full += delta;
-          controller.enqueue(encoder.encode(delta));
-        });
+        await provider.streamChat(
+          recent,
+          (delta) => {
+            full += delta;
+            controller.enqueue(encoder.encode(delta));
+          },
+          model,
+        );
         if (projectId && full) addMessage(projectId, "assistant", full).catch(() => {});
         controller.close();
       } catch (err) {

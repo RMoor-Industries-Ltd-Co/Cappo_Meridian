@@ -19,17 +19,28 @@ export interface ChatMessage {
   content: string;
 }
 
-/** A switchable AI backend (Claude, GPT, Base44 superagent, …) on the AI page. */
+/** A selectable model within a provider (e.g. Perplexity's Sonar family). */
+export interface AiModelOption {
+  id: string;
+  label: string;
+}
+
+/** A switchable AI backend (Claude, Perplexity, GPT, …) on the AI page. */
 export interface AiProvider {
   id: string;
   label: string;
-  model: string;
-  /** Env var the user must set to enable this provider (shown when unconfigured). */
-  envHint: string;
+  model: string; // default model id
+  envHint: string; // env var to set to enable it
+  models?: AiModelOption[]; // selectable models (powers the sub-selector)
   isConfigured(): boolean;
-  /** Stream a completion, invoking onDelta for each text chunk. */
-  streamChat(messages: ChatMessage[], onDelta: (text: string) => void): Promise<void>;
+  /** Stream a completion; `model` overrides the provider default when supported. */
+  streamChat(messages: ChatMessage[], onDelta: (text: string) => void, model?: string): Promise<void>;
 }
+
+const withSystem = (messages: ChatMessage[]) => [
+  { role: "system" as const, content: AI_SYSTEM_PROMPT },
+  ...messages.map((m) => ({ role: m.role, content: m.content })),
+];
 
 // ── Claude (Anthropic) ───────────────────────────────────────────
 const CLAUDE_MODEL = "claude-opus-4-8";
@@ -55,6 +66,40 @@ const claudeProvider: AiProvider = {
   },
 };
 
+// ── Perplexity (OpenAI-compatible) — with its own model switcher ──
+const PERPLEXITY_MODELS: AiModelOption[] = [
+  { id: "sonar", label: "Sonar" },
+  { id: "sonar-pro", label: "Sonar Pro" },
+  { id: "sonar-reasoning", label: "Sonar Reasoning" },
+  { id: "sonar-reasoning-pro", label: "Sonar Reasoning Pro" },
+  { id: "sonar-deep-research", label: "Sonar Deep Research" },
+];
+const PERPLEXITY_DEFAULT = env.PERPLEXITY_MODEL || "sonar-pro";
+let perplexity: OpenAI | null = null;
+
+const perplexityProvider: AiProvider = {
+  id: "perplexity",
+  label: "Perplexity",
+  model: PERPLEXITY_DEFAULT,
+  envHint: "PERPLEXITY_API_KEY",
+  models: PERPLEXITY_MODELS,
+  isConfigured: () => Boolean(env.PERPLEXITY_API_KEY),
+  async streamChat(messages, onDelta, model) {
+    if (!perplexity) {
+      perplexity = new OpenAI({ apiKey: env.PERPLEXITY_API_KEY, baseURL: "https://api.perplexity.ai" });
+    }
+    const stream = await perplexity.chat.completions.create({
+      model: model || PERPLEXITY_DEFAULT,
+      stream: true,
+      messages: withSystem(messages),
+    });
+    for await (const chunk of stream) {
+      const delta = chunk.choices[0]?.delta?.content;
+      if (delta) onDelta(delta);
+    }
+  },
+};
+
 // ── GPT (OpenAI) ─────────────────────────────────────────────────
 const OPENAI_MODEL = env.OPENAI_MODEL || "gpt-4o";
 let openai: OpenAI | null = null;
@@ -65,15 +110,12 @@ const openaiProvider: AiProvider = {
   model: OPENAI_MODEL,
   envHint: "OPENAI_API_KEY",
   isConfigured: () => Boolean(env.OPENAI_API_KEY),
-  async streamChat(messages, onDelta) {
+  async streamChat(messages, onDelta, model) {
     if (!openai) openai = new OpenAI({ apiKey: env.OPENAI_API_KEY });
     const stream = await openai.chat.completions.create({
-      model: OPENAI_MODEL,
+      model: model || OPENAI_MODEL,
       stream: true,
-      messages: [
-        { role: "system", content: AI_SYSTEM_PROMPT },
-        ...messages.map((m) => ({ role: m.role, content: m.content })),
-      ],
+      messages: withSystem(messages),
     });
     for await (const chunk of stream) {
       const delta = chunk.choices[0]?.delta?.content;
@@ -82,57 +124,7 @@ const openaiProvider: AiProvider = {
   },
 };
 
-// ── Base44 superagent (HTTPS endpoint bridge) ────────────────────
-// Base44 has no external API-key invocation, so the user exposes their
-// superagent as a Base44 backend function (service role) at an HTTPS URL.
-// Contract — POST { system, messages: [{role,content}] } with optional
-// `Authorization: Bearer <token>`; respond with either streamed text
-// (Content-Type text/plain) or JSON { text: "..." }.
-const base44Provider: AiProvider = {
-  id: "base44",
-  label: "Base44 Superagent",
-  model: env.BASE44_AGENT_MODEL || "superagent",
-  envHint: "BASE44_AGENT_URL",
-  isConfigured: () => Boolean(env.BASE44_AGENT_URL),
-  async streamChat(messages, onDelta) {
-    const res = await fetch(env.BASE44_AGENT_URL as string, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...(env.BASE44_AGENT_TOKEN ? { Authorization: `Bearer ${env.BASE44_AGENT_TOKEN}` } : {}),
-      },
-      body: JSON.stringify({
-        system: AI_SYSTEM_PROMPT,
-        messages: messages.map((m) => ({ role: m.role, content: m.content })),
-      }),
-    });
-    if (!res.ok) {
-      const detail = await res.text().catch(() => "");
-      throw new Error(`Base44 agent ${res.status}: ${detail.slice(0, 200) || res.statusText}`);
-    }
-
-    const ctype = res.headers.get("content-type") ?? "";
-    if (res.body && (ctype.includes("text/plain") || ctype.includes("text/event-stream"))) {
-      const reader = res.body.getReader();
-      const dec = new TextDecoder();
-      for (;;) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        onDelta(dec.decode(value, { stream: true }));
-      }
-      return;
-    }
-
-    // JSON response — surface the first text-bearing field.
-    const data = (await res.json().catch(() => null)) as Record<string, unknown> | null;
-    const text =
-      data &&
-      (data.text ?? data.reply ?? data.response ?? data.output ?? data.content ?? data.message);
-    onDelta(typeof text === "string" ? text : text ? JSON.stringify(text) : "(empty response)");
-  },
-};
-
-export const aiProviders: AiProvider[] = [claudeProvider, base44Provider, openaiProvider];
+export const aiProviders: AiProvider[] = [claudeProvider, perplexityProvider, openaiProvider];
 export const defaultProviderId = "claude";
 
 /** Resolve a provider by id, falling back to the default (then any configured). */
@@ -144,12 +136,18 @@ export function getProvider(id?: string): AiProvider {
   );
 }
 
-/** Public, secret-free view of the providers for the client selector. */
+/** Validate a requested model id against a provider's selectable list. */
+export function resolveModel(provider: AiProvider, model?: string): string | undefined {
+  return provider.models?.some((m) => m.id === model) ? model : undefined;
+}
+
+/** Public, secret-free view of the providers (+ their models) for the client. */
 export function providerOptions() {
   return aiProviders.map((p) => ({
     id: p.id,
     label: p.label,
     model: p.model,
     configured: p.isConfigured(),
+    models: p.models ?? [],
   }));
 }
