@@ -1,11 +1,19 @@
 import Link from "next/link";
-import { ExternalLink, CircleDot } from "lucide-react";
+import { CircleDot, ExternalLink, Inbox, Video } from "lucide-react";
 import { Card, SectionTitle } from "@/components/ui/Card";
 import { Kpi } from "@/components/ui/Kpi";
-import { Sparkline } from "@/components/ui/Sparkline";
 import { QuarterTabs } from "@/components/overview/QuarterTabs";
 import { getConnector } from "@/lib/connectors";
-import type { UnifiedItem } from "@/lib/types";
+import { type BoardStatus, type BoardTask, clickupAmgBoard } from "@/lib/connectors/clickup";
+import {
+  getAmgStructure,
+  getCaptureInbox,
+  getMeetingNotes,
+  isWikiConfigured,
+  type MeetingNote,
+  type OrgUnit,
+  type WikiItem,
+} from "@/lib/connectors/notionWiki";
 import {
   currentQuarter,
   daysUntilNextQuarter,
@@ -16,26 +24,43 @@ import {
 
 export const dynamic = "force-dynamic";
 
-async function loadClickUpTasks(): Promise<{ tasks: UnifiedItem[]; configured: boolean }> {
+const isDone = (name: string, type: string) =>
+  type === "done" || type === "closed" || /done|complete|closed/i.test(name);
+const fmtDate = (iso: string | null) =>
+  iso ? new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "";
+
+async function loadBoard(): Promise<{ tasks: BoardTask[]; statuses: BoardStatus[]; configured: boolean }> {
   const clickup = getConnector("clickup");
-  if (!clickup?.isConfigured()) return { tasks: [], configured: false };
+  if (!clickup?.isConfigured()) return { tasks: [], statuses: [], configured: false };
   try {
-    const tasks = (await clickup.listRecent?.(50)) ?? [];
-    return { tasks, configured: true };
+    const b = await clickupAmgBoard();
+    return { ...b, configured: true };
   } catch {
-    return { tasks: [], configured: true };
+    return { tasks: [], statuses: [], configured: true };
   }
 }
 
-function withinQuarter(item: UnifiedItem, q: QuarterId): boolean {
-  if (q === "company" || !item.updatedAt) return true;
-  const { start, end } = quarterDateRange(q);
-  const t = new Date(item.updatedAt).getTime();
-  return t >= start.getTime() && t <= end.getTime();
+async function loadWiki(): Promise<{
+  units: OrgUnit[];
+  domains: string[];
+  meetings: MeetingNote[];
+  captures: WikiItem[];
+  configured: boolean;
+}> {
+  if (!isWikiConfigured()) return { units: [], domains: [], meetings: [], captures: [], configured: false };
+  try {
+    const [structure, meetings, captures] = await Promise.all([
+      getAmgStructure(),
+      getMeetingNotes(5),
+      getCaptureInbox(5),
+    ]);
+    return { ...structure, meetings, captures, configured: true };
+  } catch {
+    return { units: [], domains: [], meetings: [], captures: [], configured: true };
+  }
 }
 
 const today = new Intl.DateTimeFormat("en-US", {
-  weekday: undefined,
   day: "2-digit",
   month: "long",
   year: "numeric",
@@ -52,11 +77,33 @@ export default async function Overview({
   const activeLabel = QUARTERS.find((x) => x.id === active)?.label ?? "Company";
   const daysToNext = daysUntilNextQuarter();
 
-  const { tasks, configured } = await loadClickUpTasks();
-  const scoped = tasks.filter((t) => withinQuarter(t, active));
-  const open = scoped.filter(
-    (t) => t.status && !/done|complete|closed/i.test(t.status),
-  );
+  const [board, wiki] = await Promise.all([loadBoard(), loadWiki()]);
+
+  // Work metrics (company-wide, live from ClickUp).
+  const tasks = board.tasks;
+  const activeTasks = tasks.filter((t) => !isDone(t.status, t.statusType));
+  const doneCount = tasks.length - activeTasks.length;
+  const completion = tasks.length ? Math.round((doneCount / tasks.length) * 100) : 0;
+
+  // Status breakdown (swim-lane summary).
+  const lanes = board.statuses
+    .map((s) => ({ ...s, count: tasks.filter((t) => t.status === s.name).length }))
+    .filter((s) => s.count > 0);
+  const maxLane = Math.max(1, ...lanes.map((l) => l.count));
+
+  // Quarter-scoped open-task list (by due date; Company = all).
+  const range = active === "company" ? null : quarterDateRange(active);
+  const quarterTasks = activeTasks
+    .filter((t) => {
+      if (!range) return true;
+      if (!t.due) return false;
+      const due = new Date(t.due).getTime();
+      return due >= range.start.getTime() && due <= range.end.getTime();
+    })
+    .sort((a, b) => (a.due ?? "9999").localeCompare(b.due ?? "9999"))
+    .slice(0, 8);
+
+  const brands = wiki.units.filter((u) => u.type === "Brand" || u.type === "Product Line").length;
 
   return (
     <div className="flex flex-col gap-6">
@@ -74,155 +121,137 @@ export default async function Overview({
         </div>
         {daysToNext <= 45 && (
           <p className="mt-2 text-xs text-subtle">
-            {currentQuarter()} ends in <span className="text-gold">{daysToNext} days</span> —{" "}
-            {`Q${Math.min(4, Math.floor(new Date().getMonth() / 3) + 2)}`} opens soon.
+            {currentQuarter()} ends in <span className="text-gold">{daysToNext} days</span>.
           </p>
         )}
       </section>
 
-      {/* KPI row */}
+      {/* Live KPI row */}
       <section className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <Kpi label="Projects" value="2,040" delta={12} period={activeLabel} />
-        <Kpi
-          label="Open Tasks"
-          value={configured ? String(open.length) : "158"}
-          delta={configured ? undefined : 12}
-          period={configured ? "from ClickUp" : activeLabel}
-        />
-        <Kpi label="Clients" value="158" delta={12} period={activeLabel} />
-        <Kpi label="Revenue" value="$72K" delta={-12} period={activeLabel} />
+        <Kpi label="Active Tasks" value={board.configured ? String(activeTasks.length) : "—"} period="AMG space" />
+        <Kpi label="Completed" value={board.configured ? String(doneCount) : "—"} period="AMG space" />
+        <Kpi label="Business Units" value={wiki.configured ? String(wiki.units.length) : "—"} period={`${brands} brands`} />
+        <Kpi label="Capture Inbox" value={wiki.configured ? String(wiki.captures.length) : "—"} period="ideas" />
       </section>
 
-      {/* Main grid */}
+      {/* Status breakdown + quarter gauge */}
       <section className="grid grid-cols-1 gap-4 xl:grid-cols-3">
-        {/* Work progress */}
         <Card className="col-span-1 flex flex-col p-5 xl:col-span-2">
           <SectionTitle
-            title="Work Progress Overview"
-            action={
-              <div className="flex items-center gap-3 text-xs text-subtle">
-                <span className="flex items-center gap-1">
-                  <span className="h-2 w-2 rounded-full bg-gold" /> Success
-                </span>
-                <span className="flex items-center gap-1">
-                  <span className="h-2 w-2 rounded-full bg-[#7c6cf0]" /> Failed
-                </span>
-              </div>
-            }
+            title="Work Breakdown · AMG ClickUp"
+            action={<span className="text-xs text-subtle">{tasks.length} tasks</span>}
           />
-          <div className="flex-1">
-            <Sparkline
-              data={[3, 4, 3.5, 5, 4.2, 6, 5.4, 7, 6.5, 8, 7.2, 8.6]}
-              width={760}
-              height={180}
-              color="var(--gold)"
-            />
-          </div>
-          <div className="mt-2 grid grid-cols-12 text-[10px] text-subtle">
-            {["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"].map(
-              (m) => (
-                <span key={m} className="text-center">
-                  {m}
-                </span>
-              ),
-            )}
-          </div>
-        </Card>
-
-        {/* Quarter progress gauge */}
-        <Card gold className="flex flex-col items-center justify-center gap-3 p-5">
-          <SectionTitle title="Quarter Progress" />
-          <QuarterGauge active={active} />
-          <p className="text-center text-xs text-subtle">
-            {active === "company"
-              ? "Company-wide completion across the AMG space."
-              : `Task completion for ${activeLabel}.`}
-          </p>
-        </Card>
-      </section>
-
-      {/* ClickUp tasks */}
-      <section className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <Card className="col-span-1 p-5 lg:col-span-2">
-          <SectionTitle
-            title="AMG ClickUp · Tasks"
-            action={
-              <span className="text-xs text-subtle">
-                {configured ? `${scoped.length} in ${activeLabel}` : "Not connected"}
-              </span>
-            }
-          />
-          {!configured ? (
+          {!board.configured ? (
             <EmptyClickUp />
-          ) : scoped.length === 0 ? (
-            <p className="py-6 text-center text-sm text-subtle">
-              No tasks in {activeLabel}. Try the Company view.
-            </p>
+          ) : lanes.length === 0 ? (
+            <p className="py-8 text-center text-sm text-subtle">No tasks in the AMG space.</p>
           ) : (
-            <ul className="flex flex-col divide-y divide-border">
-              {scoped.slice(0, 8).map((t) => (
-                <li key={t.id} className="flex items-center gap-3 py-2.5">
-                  <CircleDot size={14} className="shrink-0 text-gold" />
-                  <a
-                    href={t.url ?? "#"}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="flex-1 truncate text-sm text-fg hover:text-gold"
-                  >
-                    {t.title}
-                  </a>
-                  {t.status && (
-                    <span className="rounded-md bg-white/5 px-2 py-0.5 text-[10px] uppercase text-muted">
-                      {t.status}
-                    </span>
-                  )}
+            <ul className="flex flex-col gap-3 pt-1">
+              {lanes.map((l) => (
+                <li key={l.name} className="flex items-center gap-3">
+                  <span className="w-32 shrink-0 truncate text-xs uppercase tracking-wide text-muted">{l.name}</span>
+                  <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-white/5">
+                    <div
+                      className="h-full rounded-full"
+                      style={{ width: `${(l.count / maxLane) * 100}%`, background: l.color }}
+                    />
+                  </div>
+                  <span className="w-8 shrink-0 text-right text-sm text-fg">{l.count}</span>
                 </li>
               ))}
             </ul>
           )}
         </Card>
 
-        {/* Status tracker (sample) */}
+        <Card gold className="flex flex-col items-center justify-center gap-3 p-5">
+          <SectionTitle title="Completion" />
+          <Gauge pct={completion} />
+          <p className="text-center text-xs text-subtle">
+            {board.configured
+              ? `${doneCount} of ${tasks.length} AMG tasks complete.`
+              : "Connect ClickUp to track completion."}
+          </p>
+        </Card>
+      </section>
+
+      {/* Tasks + recent activity */}
+      <section className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <Card className="col-span-1 p-5 lg:col-span-2">
+          <SectionTitle
+            title="Open Tasks"
+            action={
+              <span className="text-xs text-subtle">
+                {board.configured ? `${quarterTasks.length} in ${activeLabel}` : "Not connected"}
+              </span>
+            }
+          />
+          {!board.configured ? (
+            <EmptyClickUp />
+          ) : quarterTasks.length === 0 ? (
+            <p className="py-6 text-center text-sm text-subtle">
+              No open tasks due in {activeLabel}. Try the Company view.
+            </p>
+          ) : (
+            <ul className="flex flex-col divide-y divide-border">
+              {quarterTasks.map((t) => (
+                <li key={t.id} className="flex items-center gap-3 py-2.5">
+                  <CircleDot size={14} className="shrink-0" style={{ color: t.statusColor }} />
+                  <a href={t.url} target="_blank" rel="noreferrer" className="min-w-0 flex-1 truncate text-sm text-fg hover:text-gold">
+                    {t.name}
+                  </a>
+                  <span className="hidden rounded-md bg-white/5 px-2 py-0.5 text-[10px] uppercase text-muted sm:block">
+                    {t.status}
+                  </span>
+                  {t.due && <span className="shrink-0 text-xs text-subtle">{fmtDate(t.due)}</span>}
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+
+        {/* Recent across AMG */}
         <Card className="p-5">
-          <SectionTitle title="Status Tracker" />
-          <ul className="flex flex-col gap-3">
-            {[
-              { name: "James Brown", team: "Synergy", eta: "2 Hr" },
-              { name: "Olivia Stone", team: "Apex", eta: "1 Hr" },
-              { name: "Liam Carter", team: "Meridian", eta: "Tomorrow" },
-            ].map((p) => (
-              <li key={p.name} className="flex items-center gap-3">
-                <div className="h-8 w-8 rounded-full bg-gradient-to-br from-gold-bright to-gold-deep" />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm text-fg">{p.name}</p>
-                  <p className="text-xs text-subtle">{p.team}</p>
-                </div>
-                <span className="text-xs text-muted">{p.eta}</span>
-              </li>
-            ))}
-          </ul>
+          <SectionTitle title="Recent Activity" />
+          {!wiki.configured ? (
+            <p className="py-6 text-sm text-subtle">Connect Notion to surface AMG activity.</p>
+          ) : wiki.meetings.length === 0 && wiki.captures.length === 0 ? (
+            <p className="py-6 text-sm text-subtle">No recent wiki activity yet.</p>
+          ) : (
+            <ul className="flex flex-col gap-3">
+              {wiki.meetings.map((m) => (
+                <li key={m.id} className="flex items-start gap-2.5">
+                  <Video size={14} className="mt-0.5 shrink-0 text-gold" />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm text-fg">{m.title}</p>
+                    <p className="text-xs text-subtle">{[m.source, fmtDate(m.date)].filter(Boolean).join(" · ") || "Meeting"}</p>
+                  </div>
+                </li>
+              ))}
+              {wiki.captures.map((c) => (
+                <li key={c.id} className="flex items-start gap-2.5">
+                  <Inbox size={14} className="mt-0.5 shrink-0 text-muted" />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm text-fg">{c.title}</p>
+                    <p className="text-xs text-subtle">{c.meta || "Captured"}</p>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
         </Card>
       </section>
     </div>
   );
 }
 
-function QuarterGauge({ active }: { active: QuarterId }) {
-  // Rough completion proxy for the visual; real value wired to ClickUp later.
-  const pct = active === "company" ? 64 : 42;
-  const r = 52;
+function Gauge({ pct }: { pct: number }) {
+  const r = 56;
   const circ = Math.PI * r; // half circle
   const dash = (pct / 100) * circ;
   return (
     <div className="relative h-28 w-44">
       <svg viewBox="0 0 140 80" className="h-full w-full">
-        <path
-          d="M14 74 A56 56 0 0 1 126 74"
-          fill="none"
-          stroke="var(--border-strong)"
-          strokeWidth="10"
-          strokeLinecap="round"
-        />
+        <path d="M14 74 A56 56 0 0 1 126 74" fill="none" stroke="var(--border-strong)" strokeWidth="10" strokeLinecap="round" />
         <path
           d="M14 74 A56 56 0 0 1 126 74"
           fill="none"
