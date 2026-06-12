@@ -70,7 +70,6 @@ const claudeProvider: AiProvider = {
 const PERPLEXITY_MODELS: AiModelOption[] = [
   { id: "sonar", label: "Sonar" },
   { id: "sonar-pro", label: "Sonar Pro" },
-  { id: "sonar-reasoning", label: "Sonar Reasoning" },
   { id: "sonar-reasoning-pro", label: "Sonar Reasoning Pro" },
   { id: "sonar-deep-research", label: "Sonar Deep Research" },
 ];
