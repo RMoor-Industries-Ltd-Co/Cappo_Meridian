@@ -44,16 +44,19 @@ const withSystem = (messages: ChatMessage[]) => [
 
 // ── Claude (Anthropic) ───────────────────────────────────────────
 const CLAUDE_MODEL = "claude-opus-4-8";
+// Claude Code reserves ANTHROPIC_API_KEY (won't inject it into the container),
+// so also accept CLAUDE_API_KEY for dev validation. Production uses ANTHROPIC_API_KEY.
+const claudeKey = () => env.ANTHROPIC_API_KEY || env.CLAUDE_API_KEY;
 let anthropic: Anthropic | null = null;
 
 const claudeProvider: AiProvider = {
   id: "claude",
   label: "Claude",
   model: CLAUDE_MODEL,
-  envHint: "ANTHROPIC_API_KEY",
-  isConfigured: () => Boolean(env.ANTHROPIC_API_KEY),
+  envHint: "ANTHROPIC_API_KEY (or CLAUDE_API_KEY in Claude Code)",
+  isConfigured: () => Boolean(claudeKey()),
   async streamChat(messages, onDelta) {
-    if (!anthropic) anthropic = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
+    if (!anthropic) anthropic = new Anthropic({ apiKey: claudeKey() });
     const run = anthropic.messages.stream({
       model: CLAUDE_MODEL,
       max_tokens: 8000,

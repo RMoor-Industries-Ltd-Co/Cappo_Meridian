@@ -37,6 +37,9 @@ const schema = z.object({
 
   // Anthropic — shared AMG Claude account, powers the AI research module
   ANTHROPIC_API_KEY: z.string().optional(),
+  // Claude Code reserves ANTHROPIC_API_KEY in its env; CLAUDE_API_KEY is the
+  // dev-only fallback so Claude can be validated inside a Claude Code session.
+  CLAUDE_API_KEY: z.string().optional(),
 
   // OpenAI — optional AI provider on the AI page (model switcher)
   OPENAI_API_KEY: z.string().optional(),
@@ -70,7 +73,9 @@ export const isAuthConfigured = () =>
 
 /** The AI research module is live when at least one AI provider is configured. */
 export const isAiConfigured = () =>
-  Boolean(env.ANTHROPIC_API_KEY || env.OPENAI_API_KEY || env.PERPLEXITY_API_KEY);
+  Boolean(
+    env.ANTHROPIC_API_KEY || env.CLAUDE_API_KEY || env.OPENAI_API_KEY || env.PERPLEXITY_API_KEY,
+  );
 
 /** Persistence is available only when a database URL is set. */
 export const isDbConfigured = () => Boolean(env.DATABASE_URL);
