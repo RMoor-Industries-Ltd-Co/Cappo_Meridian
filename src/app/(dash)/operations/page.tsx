@@ -1,13 +1,5 @@
-import { BookText } from "lucide-react";
-import { ModuleBoard } from "@/components/modules/ModuleBoard";
+import { OperationsPanel } from "@/components/operations/OperationsPanel";
 
 export default function OperationsPage() {
-  return (
-    <ModuleBoard
-      tag="operations"
-      title="Operations"
-      blurb="Process, SOPs, and runbooks — AMG ClickUp tasks tagged #operations."
-      icon={<BookText size={22} strokeWidth={1.75} />}
-    />
-  );
+  return <OperationsPanel />;
 }

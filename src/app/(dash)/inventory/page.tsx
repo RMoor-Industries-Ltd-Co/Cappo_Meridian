@@ -1,12 +1,11 @@
 import { Boxes } from "lucide-react";
-import { ModuleBoard } from "@/components/modules/ModuleBoard";
+import { DomainModule } from "@/components/modules/DomainModule";
 
 export default function InventoryPage() {
   return (
-    <ModuleBoard
-      tag="inventory"
-      title="Inventory"
-      blurb="Stock, SKUs, and supply — AMG ClickUp tasks tagged #inventory."
+    <DomainModule
+      domain="Inventory"
+      blurb="Stock, SKUs, and supply — ClickUp #inventory + the HVN Product Catalog."
       icon={<Boxes size={22} strokeWidth={1.75} />}
     />
   );

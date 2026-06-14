@@ -183,7 +183,7 @@ interface TaggedTaskRaw {
   id: string;
   name: string;
   url: string;
-  status?: { status: string; color?: string; type?: string };
+  status?: { status: string; color?: string; type?: string; orderindex?: number | string };
   due_date?: string | null;
   assignees?: { username?: string; email?: string }[];
 }
@@ -267,4 +267,69 @@ export async function clickupCreateTask(input: {
     body: JSON.stringify(body),
   });
   return { id: task.id, url: task.url };
+}
+
+/** A current AMG-space task on the Operations swim-lane board. */
+export interface BoardTask {
+  id: string;
+  name: string;
+  url: string;
+  status: string;
+  statusColor: string;
+  statusType: string;
+  statusOrder: number;
+  due: string | null;
+  assignees: string[];
+}
+export interface BoardStatus {
+  name: string;
+  color: string;
+  type: string;
+  order: number;
+}
+
+/**
+ * Open tasks across the AMG ClickUp space, grouped-ready by status — the
+ * Operations panel's swim lanes ("what are we working on right now").
+ */
+export async function clickupAmgBoard(): Promise<{ tasks: BoardTask[]; statuses: BoardStatus[] }> {
+  const teamId = await resolveTeamId();
+  if (!teamId) return { tasks: [], statuses: [] };
+
+  const params = new URLSearchParams({
+    include_closed: "false",
+    subtasks: "true",
+    order_by: "due_date",
+  });
+  if (env.CLICKUP_SPACE_ID) params.append("space_ids[]", env.CLICKUP_SPACE_ID);
+
+  const { tasks } = await clickup<{ tasks: TaggedTaskRaw[] }>(
+    `/team/${teamId}/task?${params.toString()}`,
+  );
+
+  const board: BoardTask[] = tasks.map((t) => ({
+    id: t.id,
+    name: t.name,
+    url: t.url,
+    status: t.status?.status ?? "—",
+    statusColor: t.status?.color ?? "var(--gold)",
+    statusType: t.status?.type ?? "open",
+    statusOrder: Number(t.status?.orderindex ?? 0) || 0,
+    due: t.due_date ? new Date(Number(t.due_date)).toISOString() : null,
+    assignees: (t.assignees ?? []).map((a) => a.username || a.email || "").filter(Boolean),
+  }));
+
+  const seen = new Map<string, BoardStatus>();
+  for (const t of board) {
+    if (!seen.has(t.status)) {
+      seen.set(t.status, { name: t.status, color: t.statusColor, type: t.statusType, order: t.statusOrder });
+    }
+  }
+  const statuses = [...seen.values()].sort((a, b) => a.order - b.order);
+  return { tasks: board, statuses };
+}
+
+/** Move a task to a different status (drag-a-swim-lane equivalent). */
+export async function clickupSetStatus(taskId: string, status: string): Promise<void> {
+  await clickup(`/task/${taskId}`, { method: "PUT", body: JSON.stringify({ status }) });
 }

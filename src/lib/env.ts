@@ -37,6 +37,18 @@ const schema = z.object({
 
   // Anthropic — shared AMG Claude account, powers the AI research module
   ANTHROPIC_API_KEY: z.string().optional(),
+  // Claude Code reserves ANTHROPIC_API_KEY in its env; CLAUDE_API_KEY is the
+  // dev-only fallback so Claude can be validated inside a Claude Code session.
+  CLAUDE_API_KEY: z.string().optional(),
+
+  // OpenAI — optional AI provider on the AI page (model switcher)
+  OPENAI_API_KEY: z.string().optional(),
+  OPENAI_MODEL: z.string().optional(),
+
+  // Perplexity — optional AI provider (OpenAI-compatible) with its own model
+  // switcher (Sonar family). PERPLEXITY_MODEL overrides the default sonar-pro.
+  PERPLEXITY_API_KEY: z.string().optional(),
+  PERPLEXITY_MODEL: z.string().optional(),
 
   // Postgres — persistence (AI research projects + conversations, etc.)
   DATABASE_URL: z.string().optional(),
@@ -59,8 +71,11 @@ export const isGoogleConfigured = () =>
 export const isAuthConfigured = () =>
   Boolean(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET && env.AUTH_SECRET);
 
-/** The AI research module is live only when the Anthropic key is set. */
-export const isAiConfigured = () => Boolean(env.ANTHROPIC_API_KEY);
+/** The AI research module is live when at least one AI provider is configured. */
+export const isAiConfigured = () =>
+  Boolean(
+    env.ANTHROPIC_API_KEY || env.CLAUDE_API_KEY || env.OPENAI_API_KEY || env.PERPLEXITY_API_KEY,
+  );
 
 /** Persistence is available only when a database URL is set. */
 export const isDbConfigured = () => Boolean(env.DATABASE_URL);

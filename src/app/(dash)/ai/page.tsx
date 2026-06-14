@@ -22,6 +22,17 @@ interface ChatMessage {
   role: "user" | "assistant";
   content: string;
 }
+interface ModelOpt {
+  id: string;
+  label: string;
+}
+interface ProviderOpt {
+  id: string;
+  label: string;
+  model: string;
+  configured: boolean;
+  models: ModelOpt[];
+}
 
 const SUGGESTIONS = [
   "Draft a Q3 go-to-market plan for AMG",
@@ -37,7 +48,35 @@ export default function AiPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
+  const [providers, setProviders] = useState<ProviderOpt[]>([]);
+  const [provider, setProvider] = useState("claude");
+  const [model, setModel] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  const activeProvider = providers.find((p) => p.id === provider);
+  const activeLabel = activeProvider?.label ?? "Claude";
+
+  // Load the available AI providers (Claude / Perplexity / GPT) for the selector.
+  useEffect(() => {
+    fetch("/api/ai/providers")
+      .then((r) => r.json())
+      .then((d: { providers?: ProviderOpt[]; default?: string }) => {
+        const list = d.providers ?? [];
+        setProviders(list);
+        const pick = list.find((p) => p.configured) ?? list.find((p) => p.id === d.default) ?? list[0];
+        if (pick) {
+          setProvider(pick.id);
+          setModel(pick.model);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  // Switch provider and reset to that provider's default model.
+  function changeProvider(id: string) {
+    setProvider(id);
+    setModel(providers.find((p) => p.id === id)?.model ?? "");
+  }
 
   // Load projects on mount (async — only sets state after the fetch resolves).
   useEffect(() => {
@@ -130,7 +169,7 @@ export default function AiPage() {
       const res = await fetch("/api/ai/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: next, projectId: pid }),
+        body: JSON.stringify({ messages: next, projectId: pid, provider, model }),
       });
       if (!res.ok || !res.body) {
         const e = await res.json().catch(() => ({}));
@@ -215,9 +254,34 @@ export default function AiPage() {
           <h1 className="text-sm font-semibold text-fg">
             {activeId ? projects.find((p) => p.id === activeId)?.name ?? "AI Workspace" : "AI Workspace"}
           </h1>
-          <span className="ml-2 rounded-md bg-gold/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-gold">
-            Claude · Opus 4.8
-          </span>
+          <div className="ml-auto flex items-center gap-2">
+            <span className="text-[10px] uppercase tracking-wide text-subtle">AI</span>
+            <select
+              value={provider}
+              onChange={(e) => changeProvider(e.target.value)}
+              className="rounded-md border border-border-strong bg-panel px-2 py-1 text-xs font-medium text-gold focus:outline-none"
+              title="Switch AI provider"
+            >
+              {providers.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.label}
+                  {p.configured ? "" : " (not configured)"}
+                </option>
+              ))}
+            </select>
+            {activeProvider && activeProvider.models.length > 0 && (
+              <select
+                value={model}
+                onChange={(e) => setModel(e.target.value)}
+                className="rounded-md border border-border bg-panel px-2 py-1 text-xs text-muted focus:outline-none"
+                title="Switch model"
+              >
+                {activeProvider.models.map((m) => (
+                  <option key={m.id} value={m.id}>{m.label}</option>
+                ))}
+              </select>
+            )}
+          </div>
         </div>
 
         <div ref={scrollRef} className="flex-1 overflow-y-auto px-5 py-4">
@@ -225,9 +289,9 @@ export default function AiPage() {
             <div className="flex h-full flex-col items-center justify-center gap-5 text-center">
               <Starburst size={48} className="text-gold" />
               <div className="max-w-md">
-                <h2 className="text-lg font-semibold text-fg">AI research, powered by Claude</h2>
+                <h2 className="text-lg font-semibold text-fg">AI research, powered by {activeLabel}</h2>
                 <p className="mt-2 text-sm text-subtle">
-                  Ask anything — strategy, analysis, drafting. Runs on the shared AMG Claude account.
+                  Ask anything — strategy, analysis, drafting. Switch models with the selector top-right.
                   {persistent ? " Conversations are saved to your projects." : ""}
                 </p>
               </div>
@@ -274,7 +338,7 @@ export default function AiPage() {
                   send(input);
                 }
               }}
-              placeholder="Ask Claude to research…"
+              placeholder={`Ask ${activeLabel} to research…`}
               className="max-h-40 flex-1 resize-none bg-transparent text-sm text-fg placeholder:text-subtle focus:outline-none"
             />
             <button
@@ -287,7 +351,7 @@ export default function AiPage() {
             </button>
           </div>
           <p className="mx-auto mt-1.5 max-w-3xl text-center text-[11px] text-subtle">
-            Claude can be wrong — verify important facts.
+            {activeLabel} can be wrong — verify important facts.
             {persistent ? "" : " Conversations aren’t saved (no database)."}
           </p>
         </div>
