@@ -58,6 +58,10 @@ const schema = z.object({
   // Machine-to-machine agent key — lets ALLIE (allen.i.verse) delegate AMG tasks to
   // Cappo's /api/agent server-to-server, separate from the human Google login.
   AGENT_API_KEY: z.string().optional(),
+
+  // Secret-at-rest key — encrypts Google OAuth tokens stored in Postgres
+  // (AES-256-GCM). Any passphrase works (SHA-256 derived). Set in production.
+  SECRET_ENCRYPTION_KEY: z.string().optional(),
 });
 
 const parsed = schema.safeParse(process.env);
