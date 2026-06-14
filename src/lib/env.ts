@@ -52,6 +52,10 @@ const schema = z.object({
 
   // Postgres — persistence (AI research projects + conversations, etc.)
   DATABASE_URL: z.string().optional(),
+
+  // Secret-at-rest key — encrypts Google OAuth tokens stored in Postgres
+  // (AES-256-GCM). Any passphrase works (SHA-256 derived). Set in production.
+  SECRET_ENCRYPTION_KEY: z.string().optional(),
 });
 
 const parsed = schema.safeParse(process.env);
