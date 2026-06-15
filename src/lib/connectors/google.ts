@@ -21,11 +21,13 @@ type Credentials = Auth.Credentials;
 const TOKEN_PATH =
   process.env.TOKEN_STORE_PATH || path.join(process.cwd(), ".google-tokens.json");
 
-// Drive read + Gmail read, plus basic profile. Widen as features land.
+// Drive CRUD + Gmail organize (label/archive/trash — gmail.modify, not permanent-delete),
+// plus basic profile. Widen as features land.
 export const GOOGLE_SCOPES = [
   // Full Drive access so the Drive module can read AND write (CRUD) files.
   "https://www.googleapis.com/auth/drive",
-  "https://www.googleapis.com/auth/gmail.readonly",
+  // gmail.modify = read + label/archive/mark-read/trash (recoverable). Not full delete.
+  "https://www.googleapis.com/auth/gmail.modify",
   "https://www.googleapis.com/auth/userinfo.email",
   "openid",
 ];

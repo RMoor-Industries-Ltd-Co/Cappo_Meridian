@@ -5,6 +5,12 @@ import {
   clickupCreateTask,
   clickupUpdateTask,
 } from "@/lib/connectors/clickup";
+import {
+  gmailSearch,
+  gmailEnsureLabel,
+  gmailModify,
+  gmailTrash,
+} from "@/lib/connectors/gmail";
 
 const AI_MODEL = "claude-opus-4-8";
 
@@ -23,7 +29,7 @@ function getAnthropic(): Anthropic | null {
 
 const SYSTEM = `You are Cappo, the AI operations engine for Apex Meridian Group (AMG). You work UNDER ALLIE (Rahm's Director of Operations): she delegates AMG tasks to you, and you EXECUTE them in AMG's systems, then report back.
 
-You can read and manage AMG's ClickUp (the AMG space only). Use your tools to pull REAL data and make exactly the changes requested — never invent task names, ids, statuses, or dates; look them up first. New tasks land in the current quarter's Agenda. When finished, give a tight summary of what you found and what you changed, including task ids, so ALLIE can relay it.`;
+You can read and manage AMG's ClickUp (the AMG space only) AND organize the AMG mailbox (Gmail: search, label, archive, mark-read, trash). Use your tools to pull REAL data and make exactly the changes requested — never invent task names, ids, statuses, or dates; look them up first (for email, gmail_search to get ids before acting). New tasks land in the current quarter's Agenda. When finished, give a tight summary of what you found and what you changed, including ids, so ALLIE can relay it.`;
 
 const TOOLS = [
   {
@@ -64,6 +70,57 @@ const TOOLS = [
       required: ["task_id"],
     },
   },
+  {
+    name: "gmail_search",
+    description:
+      "Search the connected mailbox using Gmail query syntax (e.g. 'from:pandadoc', 'subject:invoice', 'in:inbox is:unread', 'older_than:30d', 'category:promotions'). Returns id, subject, from, and a snippet for each match. Use this FIRST to find the messages to organize.",
+    input_schema: {
+      type: "object",
+      properties: { query: { type: "string" }, max: { type: "number", description: "max results (default 25)" } },
+      required: ["query"],
+    },
+  },
+  {
+    name: "gmail_label",
+    description:
+      "Apply a label to messages (creating the label if it doesn't exist), and optionally archive them out of the inbox. Provide ids (from gmail_search) and the label name; set archive=true to also archive.",
+    input_schema: {
+      type: "object",
+      properties: {
+        ids: { type: "array", items: { type: "string" } },
+        label: { type: "string" },
+        archive: { type: "boolean" },
+      },
+      required: ["ids", "label"],
+    },
+  },
+  {
+    name: "gmail_archive",
+    description: "Archive messages (remove from inbox, keep in All Mail). Provide ids.",
+    input_schema: {
+      type: "object",
+      properties: { ids: { type: "array", items: { type: "string" } } },
+      required: ["ids"],
+    },
+  },
+  {
+    name: "gmail_mark_read",
+    description: "Mark messages as read. Provide ids.",
+    input_schema: {
+      type: "object",
+      properties: { ids: { type: "array", items: { type: "string" } } },
+      required: ["ids"],
+    },
+  },
+  {
+    name: "gmail_trash",
+    description: "Move messages to Trash (recoverable ~30 days). Provide ids. Use only when clearly asked to delete.",
+    input_schema: {
+      type: "object",
+      properties: { ids: { type: "array", items: { type: "string" } } },
+      required: ["ids"],
+    },
+  },
 ];
 
 function toMs(due?: string): number | undefined {
@@ -72,7 +129,8 @@ function toMs(due?: string): number | undefined {
   return Number.isNaN(d.getTime()) ? undefined : d.getTime();
 }
 
-async function runTool(name: string, input: Record<string, string>): Promise<string> {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function runTool(name: string, input: any): Promise<string> {
   if (name === "amg_list_tasks") {
     const tasks = await clickupListTasks(input.tag);
     return tasks.length
@@ -92,11 +150,38 @@ async function runTool(name: string, input: Record<string, string>): Promise<str
       dueMs: toMs(input.due),
     });
   }
+  if (name === "gmail_search") {
+    const r = await gmailSearch(input.query, input.max ? Number(input.max) : 25);
+    return r.length
+      ? r.map((m) => `[${m.id}] ${m.subject} — ${m.from} — ${m.snippet}`).join("\n")
+      : "No matching messages.";
+  }
+  if (name === "gmail_label") {
+    const ids: string[] = input.ids ?? [];
+    const labelId = await gmailEnsureLabel(input.label);
+    await gmailModify(ids, [labelId], input.archive ? ["INBOX"] : []);
+    return `Labeled ${ids.length} message(s) "${input.label}"${input.archive ? " and archived them" : ""}.`;
+  }
+  if (name === "gmail_archive") {
+    const ids: string[] = input.ids ?? [];
+    await gmailModify(ids, [], ["INBOX"]);
+    return `Archived ${ids.length} message(s).`;
+  }
+  if (name === "gmail_mark_read") {
+    const ids: string[] = input.ids ?? [];
+    await gmailModify(ids, [], ["UNREAD"]);
+    return `Marked ${ids.length} message(s) read.`;
+  }
+  if (name === "gmail_trash") {
+    const ids: string[] = input.ids ?? [];
+    await gmailTrash(ids);
+    return `Trashed ${ids.length} message(s).`;
+  }
   return `(unknown tool: ${name})`;
 }
 
 // Dashboard-facing persona: Cappo talking directly with an AMG partner (not ALLIE delegating).
-const SYSTEM_DASH = `You are Cappo, the AI operations engine for Apex Meridian Group (AMG), talking directly with an AMG partner in the Cappo dashboard. You can READ and MANAGE AMG's ClickUp through your tools — list, create, and update tasks in the AMG space. When the partner asks you to DO something operational (add a task, set a due date, change a status), use your tools to do it and confirm exactly what you did, including task ids. When they're just thinking or asking, help them think — research, analysis, drafting. Be concise and well-structured. Never invent task names, ids, statuses, or dates — look them up first.`;
+const SYSTEM_DASH = `You are Cappo, the AI operations engine for Apex Meridian Group (AMG), talking directly with an AMG partner in the Cappo dashboard. Through your tools you can MANAGE AMG's ClickUp (list/create/update tasks) and ORGANIZE the AMG mailbox (Gmail: search, label, archive, mark-read, trash). When the partner asks you to DO something — add a task, set a due date, clean up the inbox, label and archive a batch of emails — use your tools to do it and confirm exactly what you did, with ids/counts. For email, always gmail_search first to get the message ids, then act on them. When they're just thinking or asking, help them think. Be concise and well-structured. Never invent task names, ids, statuses, or dates — look them up first. Only trash email when clearly asked.`;
 
 /** Core tool-use loop shared by the ALLIE-delegation path and the dashboard chat. */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
