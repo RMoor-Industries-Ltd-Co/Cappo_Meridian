@@ -1,9 +1,19 @@
-import { getAi, AI_MODEL } from "@/lib/ai";
+import Anthropic from "@anthropic-ai/sdk";
+import { env } from "@/lib/env";
 import {
   clickupListTasks,
   clickupCreateTask,
   clickupUpdateTask,
 } from "@/lib/connectors/clickup";
+
+const AI_MODEL = "claude-opus-4-8";
+
+// Tool-use needs the raw Anthropic client (ai.ts only exposes streaming chat).
+// Prod uses ANTHROPIC_API_KEY; CLAUDE_API_KEY is the Claude-Code dev fallback.
+function getAnthropic(): Anthropic | null {
+  const key = env.ANTHROPIC_API_KEY || env.CLAUDE_API_KEY;
+  return key ? new Anthropic({ apiKey: key }) : null;
+}
 
 /**
  * Cappo's delegated agent. ALLIE (on allen.i.verse) hands Cappo an AMG task via the
@@ -86,7 +96,7 @@ async function runTool(name: string, input: Record<string, string>): Promise<str
 }
 
 export async function runCappoAgent(task: string): Promise<string> {
-  const ai = getAi();
+  const ai = getAnthropic();
   if (!ai) return "Cappo's AI is not configured (no Anthropic key on the AMG side).";
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
