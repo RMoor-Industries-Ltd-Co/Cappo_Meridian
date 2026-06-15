@@ -68,9 +68,17 @@ const LEGAL_ENTITIES: { key: string; label: string; match: RegExp[] }[] = [
   { key: "RMI", label: "RMI — RMoor Industries", match: [/\brmi\b/i, /rmoor/i] },
 ];
 
+// Pick the entity whose name appears LAST in the string, so a hierarchical title like
+// "AMG → HVN Global → HVN - Founders…" resolves to the most-specific entity (HVN), not AMG.
 function entityFromName(name: string): string | null {
-  const e = LEGAL_ENTITIES.find((x) => x.match.some((re) => re.test(name)));
-  return e ? e.key : null;
+  let best: { key: string; idx: number } | null = null;
+  for (const e of LEGAL_ENTITIES) {
+    for (const re of e.match) {
+      const m = name.match(re);
+      if (m && m.index !== undefined && (!best || m.index > best.idx)) best = { key: e.key, idx: m.index };
+    }
+  }
+  return best ? best.key : null;
 }
 
 // The legal-document source folders (owned by admin@apex-meridian-group.com; must be
