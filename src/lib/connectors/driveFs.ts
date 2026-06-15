@@ -55,6 +55,49 @@ function toItem(f: drive_v3.Schema$File): DriveItem {
   };
 }
 
+export interface LegalGroup {
+  key: string;
+  label: string;
+  docs: DriveItem[];
+}
+
+const LEGAL_ENTITIES: { key: string; label: string; match: RegExp[] }[] = [
+  { key: "AMG", label: "AMG — Apex Meridian Group", match: [/\bamg\b/i, /apex\s*meridian/i] },
+  { key: "HVN", label: "HVN — Havenry", match: [/\bhvn\b/i, /havenry/i] },
+  { key: "3E", label: "3E Dynamics", match: [/\b3e\b/i, /3e\s*dynamics/i] },
+  { key: "RMI", label: "RMI — RMoor Industries", match: [/\brmi\b/i, /rmoor/i] },
+];
+
+// A doc counts as "legal" if its name carries one of these markers.
+const LEGAL_TERMS =
+  /agreement|resolution|operating|\bnda\b|non-?disclosure|assignment|bylaw|articles|license|buy-?sell|certificate|amendment|consent|minutes|incorporat|formation|governance|exhibit|interest confirmation/i;
+
+/**
+ * Finalized legal documents from Drive, bucketed per entity (AMG / HVN / 3E / RMI).
+ * Searches PDFs + Google Docs whose name carries a legal marker, then groups by the
+ * entity named in the filename.
+ */
+export async function getLegalDocsByEntity(): Promise<LegalGroup[]> {
+  const drive = await client();
+  const res = await drive.files.list({
+    q: "trashed=false and (mimeType='application/pdf' or mimeType='application/vnd.google-apps.document')",
+    fields: "files(id,name,mimeType,modifiedTime,webViewLink)",
+    orderBy: "name",
+    pageSize: 300,
+    supportsAllDrives: true,
+    includeItemsFromAllDrives: true,
+  });
+  const files = (res.data.files ?? []).map(toItem);
+  const groups: LegalGroup[] = LEGAL_ENTITIES.map((e) => ({ key: e.key, label: e.label, docs: [] }));
+  for (const f of files) {
+    if (!LEGAL_TERMS.test(f.name)) continue;
+    const ent = LEGAL_ENTITIES.find((e) => e.match.some((re) => re.test(f.name)));
+    if (!ent) continue;
+    groups.find((g) => g.key === ent.key)!.docs.push(f);
+  }
+  return groups;
+}
+
 /** List children of a folder (folders first, then files by name). */
 export async function driveList(parentId = "root"): Promise<DriveItem[]> {
   const drive = await client();
