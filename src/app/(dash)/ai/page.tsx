@@ -11,6 +11,7 @@ import {
   ArrowUp,
   Plus,
   Trash2,
+  Zap,
 } from "lucide-react";
 import { Starburst } from "@/components/brand/Starburst";
 
@@ -51,6 +52,7 @@ export default function AiPage() {
   const [providers, setProviders] = useState<ProviderOpt[]>([]);
   const [provider, setProvider] = useState("claude");
   const [model, setModel] = useState("");
+  const [actMode, setActMode] = useState(false); // when on, Cappo can act (ClickUp tools), not just chat
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const activeProvider = providers.find((p) => p.id === provider);
@@ -165,6 +167,24 @@ export default function AiPage() {
         return copy;
       });
 
+    // Act mode: agentic, non-streamed — Cappo may use tools to actually do the work.
+    if (actMode) {
+      try {
+        const res = await fetch("/api/ai/act", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ messages: next, projectId: pid }),
+        });
+        const d = await res.json().catch(() => ({}));
+        appendToLast(res.ok ? d.reply || "(no reply)" : `⚠️ ${d.error || res.statusText}`);
+      } catch (err) {
+        appendToLast(`⚠️ ${err instanceof Error ? err.message : String(err)}`);
+      } finally {
+        setStreaming(false);
+      }
+      return;
+    }
+
     try {
       const res = await fetch("/api/ai/chat", {
         method: "POST",
@@ -255,6 +275,13 @@ export default function AiPage() {
             {activeId ? projects.find((p) => p.id === activeId)?.name ?? "AI Workspace" : "AI Workspace"}
           </h1>
           <div className="ml-auto flex items-center gap-2">
+            <button
+              onClick={() => setActMode((v) => !v)}
+              className={`flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-medium transition-colors ${actMode ? "border-gold bg-gold/15 text-gold" : "border-border text-muted hover:text-fg"}`}
+              title="When on, Cappo can ACT — create/update AMG ClickUp tasks — not just chat"
+            >
+              <Zap size={13} /> {actMode ? "Acting" : "Act"}
+            </button>
             <span className="text-[10px] uppercase tracking-wide text-subtle">AI</span>
             <select
               value={provider}
@@ -338,7 +365,7 @@ export default function AiPage() {
                   send(input);
                 }
               }}
-              placeholder={`Ask ${activeLabel} to research…`}
+              placeholder={actMode ? "Tell Cappo to do something in AMG (create/update tasks)…" : `Ask ${activeLabel} to research…`}
               className="max-h-40 flex-1 resize-none bg-transparent text-sm text-fg placeholder:text-subtle focus:outline-none"
             />
             <button

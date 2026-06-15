@@ -95,18 +95,23 @@ async function runTool(name: string, input: Record<string, string>): Promise<str
   return `(unknown tool: ${name})`;
 }
 
-export async function runCappoAgent(task: string): Promise<string> {
+// Dashboard-facing persona: Cappo talking directly with an AMG partner (not ALLIE delegating).
+const SYSTEM_DASH = `You are Cappo, the AI operations engine for Apex Meridian Group (AMG), talking directly with an AMG partner in the Cappo dashboard. You can READ and MANAGE AMG's ClickUp through your tools — list, create, and update tasks in the AMG space. When the partner asks you to DO something operational (add a task, set a due date, change a status), use your tools to do it and confirm exactly what you did, including task ids. When they're just thinking or asking, help them think — research, analysis, drafting. Be concise and well-structured. Never invent task names, ids, statuses, or dates — look them up first.`;
+
+/** Core tool-use loop shared by the ALLIE-delegation path and the dashboard chat. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function runLoop(system: string, seed: any[]): Promise<string> {
   const ai = getAnthropic();
   if (!ai) return "Cappo's AI is not configured (no Anthropic key on the AMG side).";
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const messages: any[] = [{ role: "user", content: `Task from ALLIE: ${task}` }];
+  const messages: any[] = [...seed];
   let lastText = "";
   for (let i = 0; i < 7; i++) {
     const resp = await ai.messages.create({
       model: AI_MODEL,
       max_tokens: 1300,
-      system: SYSTEM,
+      system,
       messages,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       tools: TOOLS as any,
@@ -138,4 +143,20 @@ export async function runCappoAgent(task: string): Promise<string> {
     messages.push({ role: "user", content: results });
   }
   return lastText || "(Cappo worked on it but couldn't finish cleanly.)";
+}
+
+/** ALLIE delegation: a single self-contained AMG task. */
+export function runCappoAgent(task: string): Promise<string> {
+  return runLoop(SYSTEM, [{ role: "user", content: `Task from ALLIE: ${task}` }]);
+}
+
+/** Dashboard chat: a partner conversation where Cappo can also act via tools. */
+export function runCappoAgentChat(
+  history: { role: "user" | "assistant"; content: string }[],
+): Promise<string> {
+  const seed = history
+    .filter((m) => m && (m.role === "user" || m.role === "assistant") && m.content)
+    .slice(-20)
+    .map((m) => ({ role: m.role, content: m.content }));
+  return runLoop(SYSTEM_DASH, seed);
 }
