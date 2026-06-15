@@ -244,6 +244,47 @@ async function resolveModuleListId(): Promise<string | undefined> {
   return list?.id;
 }
 
+/** List AMG-space tasks (optionally filtered by tag) — for the delegated agent. */
+export async function clickupListTasks(
+  tag?: string,
+): Promise<{ id: string; name: string; status: string; due: string | null }[]> {
+  const teamId = await resolveTeamId();
+  if (!teamId) return [];
+  const params = new URLSearchParams({
+    include_closed: "true",
+    subtasks: "true",
+    order_by: "due_date",
+  });
+  if (env.CLICKUP_SPACE_ID) params.append("space_ids[]", env.CLICKUP_SPACE_ID);
+  if (tag) params.append("tags[]", tag);
+  const { tasks } = await clickup<{
+    tasks: { id: string; name: string; status?: { status: string }; due_date?: string | null }[];
+  }>(`/team/${teamId}/task?${params.toString()}`);
+  return tasks.map((t) => ({
+    id: t.id,
+    name: t.name,
+    status: t.status?.status ?? "—",
+    due: t.due_date ? new Date(Number(t.due_date)).toISOString().slice(0, 10) : null,
+  }));
+}
+
+/** Update an AMG task by id (name / status / due date). */
+export async function clickupUpdateTask(
+  taskId: string,
+  fields: { name?: string; status?: string; dueMs?: number },
+): Promise<string> {
+  const body: { name?: string; status?: string; due_date?: number; due_date_time?: boolean } = {};
+  if (fields.name) body.name = fields.name;
+  if (fields.status) body.status = fields.status;
+  if (fields.dueMs) {
+    body.due_date = fields.dueMs;
+    body.due_date_time = false;
+  }
+  if (Object.keys(body).length === 0) return "Nothing to update.";
+  await clickup(`/task/${taskId}`, { method: "PUT", body: JSON.stringify(body) });
+  return `Updated AMG task ${taskId}: ${Object.keys(body).join(", ")}`;
+}
+
 /** Create a task in the AMG space (current quarter), optionally tagged + due. */
 export async function clickupCreateTask(input: {
   name: string;

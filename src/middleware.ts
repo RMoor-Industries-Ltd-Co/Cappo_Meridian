@@ -19,6 +19,7 @@ const protect = auth((req) => {
     pathname.startsWith("/icon") ||
     pathname.startsWith("/apple-icon") ||
     pathname === "/api/health" ||
+    pathname === "/api/agent" || // keyed machine-to-machine (ALLIE → Cappo); own auth
     /\.[a-zA-Z0-9]+$/.test(pathname); // static files in /public (logo .png/.svg, etc.)
 
   if (!req.auth && !isPublic) {
