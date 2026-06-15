@@ -68,32 +68,60 @@ const LEGAL_ENTITIES: { key: string; label: string; match: RegExp[] }[] = [
   { key: "RMI", label: "RMI — RMoor Industries", match: [/\brmi\b/i, /rmoor/i] },
 ];
 
-// A doc counts as "legal" if its name carries one of these markers.
-const LEGAL_TERMS =
-  /agreement|resolution|operating|\bnda\b|non-?disclosure|assignment|bylaw|articles|license|buy-?sell|certificate|amendment|consent|minutes|incorporat|formation|governance|exhibit|interest confirmation/i;
+function entityFromName(name: string): string | null {
+  const e = LEGAL_ENTITIES.find((x) => x.match.some((re) => re.test(name)));
+  return e ? e.key : null;
+}
+
+// The legal-document source folders (owned by admin@apex-meridian-group.com; must be
+// shared with the Cappo connector account). Each folder carries a default entity;
+// a file/subfolder name can override it to a sub-entity (e.g. 3E inside AMG Legal).
+const LEGAL_ROOTS: { id: string; entity: string }[] = [
+  { id: "1HF9X4TZ59fVQ2JEPSUCuKGl0I6GA5Mf6", entity: "AMG" }, // "AMG Legal"
+  { id: "1p0-3Ekc_dX6aDdA_TB4W8i9bH2fHcvEO", entity: "HVN" }, // "HVN GLOBAL"
+];
+
+async function walkLegal(
+  drive: drive_v3.Drive,
+  folderId: string,
+  inherited: string,
+  out: { entity: string; item: DriveItem }[],
+): Promise<void> {
+  let files: drive_v3.Schema$File[];
+  try {
+    const res = await drive.files.list({
+      q: `'${folderId}' in parents and trashed = false`,
+      fields: "files(id,name,mimeType,modifiedTime,size,webViewLink,iconLink)",
+      pageSize: 200,
+      orderBy: "name",
+      supportsAllDrives: true,
+      includeItemsFromAllDrives: true,
+    });
+    files = res.data.files ?? [];
+  } catch {
+    return; // folder not accessible (not shared yet) — skip gracefully
+  }
+  for (const f of files) {
+    if (f.mimeType === FOLDER_MIME) {
+      await walkLegal(drive, f.id!, entityFromName(f.name ?? "") ?? inherited, out);
+    } else {
+      out.push({ entity: entityFromName(f.name ?? "") ?? inherited, item: toItem(f) });
+    }
+  }
+}
 
 /**
- * Finalized legal documents from Drive, bucketed per entity (AMG / HVN / 3E / RMI).
- * Searches PDFs + Google Docs whose name carries a legal marker, then groups by the
- * entity named in the filename.
+ * Finalized legal documents, read from the dedicated AMG/HVN Drive folders (recursively)
+ * and bucketed per entity (AMG / HVN / 3E / RMI). Entity comes from the file/subfolder name
+ * when it names one, else the source folder's default entity.
  */
 export async function getLegalDocsByEntity(): Promise<LegalGroup[]> {
   const drive = await client();
-  const res = await drive.files.list({
-    q: "trashed=false and (mimeType='application/pdf' or mimeType='application/vnd.google-apps.document')",
-    fields: "files(id,name,mimeType,modifiedTime,webViewLink)",
-    orderBy: "name",
-    pageSize: 300,
-    supportsAllDrives: true,
-    includeItemsFromAllDrives: true,
-  });
-  const files = (res.data.files ?? []).map(toItem);
+  const collected: { entity: string; item: DriveItem }[] = [];
+  for (const root of LEGAL_ROOTS) await walkLegal(drive, root.id, root.entity, collected);
   const groups: LegalGroup[] = LEGAL_ENTITIES.map((e) => ({ key: e.key, label: e.label, docs: [] }));
-  for (const f of files) {
-    if (!LEGAL_TERMS.test(f.name)) continue;
-    const ent = LEGAL_ENTITIES.find((e) => e.match.some((re) => re.test(f.name)));
-    if (!ent) continue;
-    groups.find((g) => g.key === ent.key)!.docs.push(f);
+  for (const { entity, item } of collected) {
+    (groups.find((g) => g.key === entity) ?? groups[0]).docs.push(item);
   }
   return groups;
 }
