@@ -41,6 +41,27 @@ async function ensureSchema(p: Pool): Promise<void> {
         );
         CREATE INDEX IF NOT EXISTS idx_research_messages_project
           ON research_messages(project_id, id);
+
+        CREATE TABLE IF NOT EXISTS suppliers (
+          id            BIGSERIAL PRIMARY KEY,
+          name          TEXT NOT NULL,
+          contact_name  TEXT, role TEXT, phone TEXT, email TEXT, website TEXT,
+          location      TEXT, timezone TEXT, category TEXT, source TEXT,
+          stage         TEXT NOT NULL DEFAULT 'new', interest TEXT,
+          moq           TEXT, lead_time TEXT, price_tiers TEXT, payment_terms TEXT,
+          sample_available BOOLEAN, sample_cost TEXT, private_label BOOLEAN,
+          certifications TEXT, catalog_url TEXT, shipping_origin TEXT,
+          created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+          updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+        );
+        CREATE TABLE IF NOT EXISTS call_logs (
+          id            BIGSERIAL PRIMARY KEY,
+          supplier_id   BIGINT NOT NULL REFERENCES suppliers(id) ON DELETE CASCADE,
+          rep           TEXT, outcome TEXT NOT NULL, notes TEXT,
+          duration_seconds INT, callback_at TIMESTAMPTZ, clickup_url TEXT,
+          created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+        );
+        CREATE INDEX IF NOT EXISTS idx_call_logs_supplier ON call_logs(supplier_id, id DESC);
       `)
       .then(() => undefined)
       .catch((e) => {
@@ -127,4 +148,115 @@ export async function addMessage(
     [projectId, role, content],
   );
   await p.query(`UPDATE research_projects SET updated_at = now() WHERE id = $1`, [projectId]);
+}
+
+// ── Contact Center (supplier CRM + call logs) ────────────────────────
+export interface Supplier {
+  id: string;
+  name: string;
+  contact_name: string | null;
+  role: string | null;
+  phone: string | null;
+  email: string | null;
+  website: string | null;
+  location: string | null;
+  timezone: string | null;
+  category: string | null;
+  source: string | null;
+  stage: string;
+  interest: string | null;
+  moq: string | null;
+  lead_time: string | null;
+  price_tiers: string | null;
+  payment_terms: string | null;
+  sample_available: boolean | null;
+  sample_cost: string | null;
+  private_label: boolean | null;
+  certifications: string | null;
+  catalog_url: string | null;
+  shipping_origin: string | null;
+  created_at: string;
+  updated_at: string;
+}
+export interface CallLog {
+  id: string;
+  supplier_id: string;
+  rep: string | null;
+  outcome: string;
+  notes: string | null;
+  duration_seconds: number | null;
+  callback_at: string | null;
+  clickup_url: string | null;
+  created_at: string;
+}
+
+const SUP_COLS = [
+  "name", "contact_name", "role", "phone", "email", "website", "location", "timezone",
+  "category", "source", "stage", "interest", "moq", "lead_time", "price_tiers",
+  "payment_terms", "sample_available", "sample_cost", "private_label", "certifications",
+  "catalog_url", "shipping_origin",
+] as const;
+const SUP_RET = `id::text, ${SUP_COLS.join(", ")}, created_at, updated_at`;
+const CALL_RET =
+  "id::text, supplier_id::text, rep, outcome, notes, duration_seconds, callback_at, clickup_url, created_at";
+
+export async function listSuppliers(): Promise<Supplier[]> {
+  const p = await db();
+  if (!p) return [];
+  const { rows } = await p.query<Supplier>(`SELECT ${SUP_RET} FROM suppliers ORDER BY updated_at DESC LIMIT 500`);
+  return rows;
+}
+
+export async function getSupplierWithCalls(
+  id: string,
+): Promise<{ supplier: Supplier | null; calls: CallLog[] }> {
+  const p = await db();
+  if (!p) return { supplier: null, calls: [] };
+  const s = await p.query<Supplier>(`SELECT ${SUP_RET} FROM suppliers WHERE id = $1`, [id]);
+  const c = await p.query<CallLog>(
+    `SELECT ${CALL_RET} FROM call_logs WHERE supplier_id = $1 ORDER BY id DESC LIMIT 50`,
+    [id],
+  );
+  return { supplier: s.rows[0] ?? null, calls: c.rows };
+}
+
+/** Insert or update a supplier (by presence of id). Returns the full row. */
+export async function upsertSupplier(s: Record<string, unknown>): Promise<Supplier> {
+  const p = await db();
+  if (!p) throw new Error("Database not configured");
+  const vals = SUP_COLS.map((c) => s[c] ?? null);
+  if (s.id) {
+    const sets = SUP_COLS.map((c, i) => `${c} = $${i + 1}`).join(", ");
+    const { rows } = await p.query<Supplier>(
+      `UPDATE suppliers SET ${sets}, updated_at = now() WHERE id = $${SUP_COLS.length + 1} RETURNING ${SUP_RET}`,
+      [...vals, s.id],
+    );
+    return rows[0];
+  }
+  const ph = SUP_COLS.map((_, i) => `$${i + 1}`).join(", ");
+  const { rows } = await p.query<Supplier>(
+    `INSERT INTO suppliers (${SUP_COLS.join(", ")}) VALUES (${ph}) RETURNING ${SUP_RET}`,
+    vals,
+  );
+  return rows[0];
+}
+
+export async function logCall(
+  supplierId: string,
+  c: { rep?: string | null; outcome: string; notes?: string | null; durationSeconds?: number | null; callbackAt?: string | null },
+): Promise<CallLog> {
+  const p = await db();
+  if (!p) throw new Error("Database not configured");
+  const { rows } = await p.query<CallLog>(
+    `INSERT INTO call_logs (supplier_id, rep, outcome, notes, duration_seconds, callback_at)
+       VALUES ($1, $2, $3, $4, $5, $6) RETURNING ${CALL_RET}`,
+    [supplierId, c.rep ?? null, c.outcome, c.notes ?? null, c.durationSeconds ?? null, c.callbackAt ?? null],
+  );
+  return rows[0];
+}
+
+export async function setCallClickup(callId: string, url: string): Promise<void> {
+  const p = await db();
+  if (!p) return;
+  await p.query(`UPDATE call_logs SET clickup_url = $1 WHERE id = $2`, [url, callId]);
 }
