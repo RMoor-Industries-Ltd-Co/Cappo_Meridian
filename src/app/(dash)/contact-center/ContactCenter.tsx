@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { PhoneCall, Clock, ExternalLink } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { PhoneCall, Clock, ExternalLink, ChevronLeft, ChevronRight } from "lucide-react";
+import { PLAYBOOKS, fillScript, suggestPlaybook, type ScriptStage } from "@/lib/callScripts";
 
 interface Supplier {
   id?: string;
@@ -76,6 +77,8 @@ export function ContactCenter() {
   const [callbackAt, setCallbackAt] = useState("");
   const [seconds, setSeconds] = useState(0);
   const [startedAt] = useState(() => new Date());
+  const [pbId, setPbId] = useState("general");
+  const [stageIdx, setStageIdx] = useState(0);
   const [saving, setSaving] = useState(false);
   const [result, setResult] = useState<{ msg: string; url?: string | null } | null>(null);
   const notesRef = useRef<HTMLTextAreaElement>(null);
@@ -112,16 +115,27 @@ export function ContactCenter() {
     notesRef.current?.focus();
   }
 
-  const greeting = useMemo(() => {
-    const you = rep || "{your name}";
-    const c = form.contact_name || "there";
-    const cat = (form.category || "candles, incense & oils").toLowerCase();
-    return `Hi — is this ${c}? Great. ${c}, this is ${you} with Havenry. Thanks for picking up — did I catch you at an okay time for a quick two minutes?
+  const ctx: Record<string, string> = {
+    rep: rep || "Alex",
+    contact: form.contact_name || "there",
+    company: form.name || "your team",
+    category: (form.category || "home goods").toLowerCase(),
+  };
+  const pb = PLAYBOOKS.find((p) => p.id === pbId) ?? PLAYBOOKS[0];
+  const stage = pb.stages[Math.min(stageIdx, pb.stages.length - 1)];
+  const suggestedId = suggestPlaybook(form.category);
 
-The reason I'm reaching out — we're a growing home-and-lifestyle brand specializing in ${cat}, and we're building out our supplier network. I wanted to find out whether you're taking on new wholesale accounts, and whether there's a fit as we scale our Shopify store.
+  function pickPlaybook(id: string) {
+    setPbId(id);
+    setStageIdx(0);
+  }
 
-Quick one — are you the right person to talk to about wholesale pricing & minimums, or is there someone I should connect with?`;
-  }, [rep, form.contact_name, form.category]);
+  function insertStage(s: ScriptStage) {
+    const t = new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
+    const extra = s.checklist ? "\n" + s.checklist.map((q) => `  • ${fillScript(q, ctx)}: `).join("\n") : "";
+    setNotes((n) => `${n ? n + "\n" : ""}[${t}] ${pb.name} · ${s.label}${extra}\n`);
+    notesRef.current?.focus();
+  }
 
   async function save(outcome: string) {
     if (!form.name.trim()) {
@@ -241,8 +255,109 @@ Quick one — are you the right person to talk to about wholesale pricing & mini
           </div>
 
           <div className="panel panel-gold p-4">
-            <h2 className="mb-2 text-sm font-semibold text-fg">Script · Greeting</h2>
-            <p className="whitespace-pre-wrap text-sm leading-relaxed text-muted">{greeting}</p>
+            <div className="mb-3 flex flex-wrap items-center gap-2">
+              <h2 className="mr-auto text-sm font-semibold text-fg">Call Flow</h2>
+              <select value={pbId} onChange={(e) => pickPlaybook(e.target.value)} className={`${inputCls} w-auto`}>
+                {PLAYBOOKS.map((p) => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+            </div>
+
+            {suggestedId !== pbId && (
+              <button
+                onClick={() => pickPlaybook(suggestedId)}
+                className="mb-3 w-full rounded-md border border-gold/40 px-2.5 py-1.5 text-left text-xs text-gold hover:bg-gold/10"
+              >
+                Suggested for “{form.category}”: {PLAYBOOKS.find((p) => p.id === suggestedId)?.name} — tap to switch
+              </button>
+            )}
+
+            <div className="mb-3 grid gap-1 text-xs text-subtle">
+              <span><span className="font-medium text-muted">Who:</span> {pb.who}</span>
+              <span><span className="font-medium text-muted">Lead with:</span> {pb.leadWith}</span>
+              <span><span className="font-medium text-muted">Key phrase:</span> “{pb.keyPhrase}”</span>
+            </div>
+
+            {/* Stage pills */}
+            <div className="mb-3 flex flex-wrap gap-1">
+              {pb.stages.map((s, i) => (
+                <button
+                  key={s.id}
+                  onClick={() => setStageIdx(i)}
+                  className={`rounded-full px-2.5 py-1 text-xs font-medium ${
+                    i === stageIdx ? "btn-gold" : "border border-border text-subtle hover:text-fg"
+                  }`}
+                >
+                  {i + 1}. {s.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Active stage */}
+            <div className="rounded-lg border border-border bg-bg/40 p-3">
+              <p className="mb-2 text-xs font-medium uppercase tracking-wide text-gold">{stage.goal}</p>
+              {stage.lines && (
+                <div className="flex flex-col gap-2">
+                  {stage.lines.map((ln, i) => (
+                    <p key={i} className="whitespace-pre-wrap text-sm leading-relaxed text-muted">{fillScript(ln, ctx)}</p>
+                  ))}
+                </div>
+              )}
+              {stage.checklist && (
+                <ul className="mt-3 flex flex-col gap-1.5">
+                  {stage.checklist.map((q) => (
+                    <li key={q} className="flex items-start gap-2 text-sm text-muted">
+                      <span className="mt-0.5 text-gold">•</span>
+                      <span>{fillScript(q, ctx)}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {stage.coaching && (
+                <p className="mt-3 rounded-md bg-gold/10 px-2.5 py-1.5 text-xs italic text-subtle">
+                  Coach: {stage.coaching}
+                </p>
+              )}
+              <div className="mt-3 flex items-center justify-between">
+                <button onClick={() => insertStage(stage)} className="rounded-md border border-border px-2 py-1 text-xs text-gold hover:bg-gold/10">
+                  + log to notes
+                </button>
+                <div className="flex gap-1">
+                  <button
+                    disabled={stageIdx === 0}
+                    onClick={() => setStageIdx((i) => Math.max(0, i - 1))}
+                    className="rounded-md border border-border p-1 text-muted hover:text-fg disabled:opacity-30"
+                  >
+                    <ChevronLeft size={16} />
+                  </button>
+                  <button
+                    disabled={stageIdx === pb.stages.length - 1}
+                    onClick={() => setStageIdx((i) => Math.min(pb.stages.length - 1, i + 1))}
+                    className="rounded-md border border-border p-1 text-muted hover:text-fg disabled:opacity-30"
+                  >
+                    <ChevronRight size={16} />
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <details className="mt-3 text-xs">
+              <summary className="cursor-pointer text-subtle hover:text-fg">Before you dial — prep checklist</summary>
+              <ul className="mt-1.5 flex flex-col gap-1 pl-1">
+                {pb.prep.map((p) => (
+                  <li key={p} className="flex items-start gap-2 text-muted"><span className="mt-0.5 text-gold">✓</span><span>{p}</span></li>
+                ))}
+              </ul>
+            </details>
+            <details className="mt-1.5 text-xs">
+              <summary className="cursor-pointer text-red-400/80 hover:text-red-400">Red flags — walk away signals</summary>
+              <ul className="mt-1.5 flex flex-col gap-1 pl-1">
+                {pb.redFlags.map((f) => (
+                  <li key={f} className="flex items-start gap-2 text-muted"><span className="mt-0.5 text-red-400/80">🚩</span><span>{f}</span></li>
+                ))}
+              </ul>
+            </details>
           </div>
         </div>
 
