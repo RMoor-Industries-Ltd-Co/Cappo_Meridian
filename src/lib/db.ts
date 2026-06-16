@@ -1,5 +1,6 @@
 import { Pool } from "pg";
 import { env } from "@/lib/env";
+import { SEED_SUPPLIERS, seedRow } from "@/lib/suppliers";
 
 /**
  * Postgres access for Cappo_Meridian.
@@ -12,6 +13,7 @@ import { env } from "@/lib/env";
 
 let pool: Pool | null = null;
 let schemaReady: Promise<void> | null = null;
+let seedReady: Promise<void> | null = null;
 
 function getPool(): Pool | null {
   if (!env.DATABASE_URL) return null;
@@ -72,11 +74,37 @@ async function ensureSchema(p: Pool): Promise<void> {
   return schemaReady;
 }
 
-/** Returns a ready pool (schema ensured), or null if DB isn't configured. */
+/**
+ * Seed the HVN supplier directory once per process. Idempotent: inserts each
+ * supplier only if a row with that name doesn't already exist, so it never
+ * duplicates or clobbers rows the user has edited.
+ */
+async function ensureSeed(p: Pool): Promise<void> {
+  if (!seedReady) {
+    seedReady = (async () => {
+      for (const s of SEED_SUPPLIERS) {
+        const r = seedRow(s);
+        await p.query(
+          `INSERT INTO suppliers (name, contact_name, role, phone, email, website, location, category, source)
+             SELECT $1, $2, $3, $4, $5, $6, $7, $8, $9
+             WHERE NOT EXISTS (SELECT 1 FROM suppliers WHERE name = $1)`,
+          [r.name, r.contact_name, r.role, r.phone, r.email, r.website, r.location, r.category, r.source],
+        );
+      }
+    })().catch((e) => {
+      seedReady = null; // allow retry on next call
+      throw e;
+    });
+  }
+  return seedReady;
+}
+
+/** Returns a ready pool (schema ensured + suppliers seeded), or null if DB isn't configured. */
 export async function db(): Promise<Pool | null> {
   const p = getPool();
   if (!p) return null;
   await ensureSchema(p);
+  await ensureSeed(p);
   return p;
 }
 

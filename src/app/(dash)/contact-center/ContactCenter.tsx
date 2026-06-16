@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { PhoneCall, Clock, ExternalLink, ChevronLeft, ChevronRight } from "lucide-react";
 import { PLAYBOOKS, fillScript, suggestPlaybook, type ScriptStage } from "@/lib/callScripts";
+import { directoryFor } from "@/lib/suppliers";
 
 interface Supplier {
   id?: string;
@@ -43,7 +44,7 @@ const IDENTITY: { k: keyof Supplier; label: string; type?: string }[] = [
   { k: "timezone", label: "Timezone" },
   { k: "source", label: "Source" },
 ];
-const CATEGORIES = ["Candles", "Incense", "Burning oils", "Lounge goods", "Packaging", "Fragrance / raw", "Other"];
+const CATEGORIES = ["Candles", "Incense", "Burning oils", "Stone décor", "Furniture", "Fragrance / raw", "Packaging", "Other"];
 const TERMS: { k: keyof Supplier; label: string }[] = [
   { k: "moq", label: "MOQ" },
   { k: "lead_time", label: "Lead time" },
@@ -100,12 +101,15 @@ export function ContactCenter() {
     if (!id) {
       setForm(EMPTY);
       setNotes("");
+      pickPlaybook("general");
       return;
     }
     const d = await fetch(`/api/contacts/${id}`).then((r) => r.json()).catch(() => null);
     if (d?.supplier) {
       setForm(d.supplier);
       setNotes("");
+      const dir = directoryFor(d.supplier.name);
+      pickPlaybook(dir?.playbook ?? suggestPlaybook(d.supplier.category));
     }
   }
 
@@ -124,6 +128,9 @@ export function ContactCenter() {
   const pb = PLAYBOOKS.find((p) => p.id === pbId) ?? PLAYBOOKS[0];
   const stage = pb.stages[Math.min(stageIdx, pb.stages.length - 1)];
   const suggestedId = suggestPlaybook(form.category);
+  const dir = directoryFor(form.name);
+  const product = dir?.product ?? null;
+  const highlights = dir?.highlights ?? null;
 
   function pickPlaybook(id: string) {
     setPbId(id);
@@ -222,38 +229,8 @@ export function ContactCenter() {
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        {/* Left: identity + script */}
-        <div className="flex flex-col gap-4">
-          <div className="panel p-4">
-            <h2 className="mb-3 text-sm font-semibold text-fg">Lead</h2>
-            <div className="grid grid-cols-2 gap-2.5">
-              {IDENTITY.map((f) => (
-                <label key={f.k} className="flex flex-col gap-1 text-xs text-subtle">
-                  {f.label}
-                  <input
-                    type={f.type ?? "text"}
-                    value={(form[f.k] as string) ?? ""}
-                    onChange={(e) => set(f.k, e.target.value)}
-                    className={inputCls}
-                  />
-                </label>
-              ))}
-              <label className="flex flex-col gap-1 text-xs text-subtle">
-                Category
-                <select value={form.category ?? ""} onChange={(e) => set("category", e.target.value)} className={inputCls}>
-                  {CATEGORIES.map((c) => (
-                    <option key={c} value={c}>{c}</option>
-                  ))}
-                </select>
-              </label>
-            </div>
-            {form.phone && (
-              <a href={`tel:${form.phone}`} className="mt-3 inline-flex items-center gap-1.5 rounded-md border border-gold/40 px-3 py-1.5 text-sm text-gold hover:bg-gold/10">
-                <PhoneCall size={14} /> Call {form.phone}
-              </a>
-            )}
-          </div>
-
+        {/* Left: tailored call script */}
+        <div className="flex flex-col gap-4 lg:sticky lg:top-4 lg:self-start">
           <div className="panel panel-gold p-4">
             <div className="mb-3 flex flex-wrap items-center gap-2">
               <h2 className="mr-auto text-sm font-semibold text-fg">Call Flow</h2>
@@ -278,6 +255,17 @@ export function ContactCenter() {
               <span><span className="font-medium text-muted">Lead with:</span> {pb.leadWith}</span>
               <span><span className="font-medium text-muted">Key phrase:</span> “{pb.keyPhrase}”</span>
             </div>
+
+            {highlights && (
+              <div className="mb-3 rounded-lg border border-gold/30 bg-gold/5 p-2.5">
+                <p className="mb-1 text-xs font-semibold text-gold">For {form.name}</p>
+                <ul className="flex flex-col gap-1">
+                  {highlights.map((h) => (
+                    <li key={h} className="flex items-start gap-2 text-xs text-muted"><span className="mt-0.5 text-gold">›</span><span>{h}</span></li>
+                  ))}
+                </ul>
+              </div>
+            )}
 
             {/* Stage pills */}
             <div className="mb-3 flex flex-wrap gap-1">
@@ -361,8 +349,68 @@ export function ContactCenter() {
           </div>
         </div>
 
-        {/* Right: capture + notes */}
+        {/* Right: product + lead + capture + notes */}
         <div className="flex flex-col gap-4">
+          {/* Product slot — image room above the inputs, adjacent to the script */}
+          <div className="panel p-4">
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-fg">HVN Product</h2>
+              {product?.line && (
+                <span className="rounded-full bg-gold/15 px-2 py-0.5 text-[11px] font-medium text-gold">{product.line}</span>
+              )}
+            </div>
+            <div
+              className="flex aspect-[16/9] w-full items-center justify-center rounded-lg border border-dashed border-border-strong bg-bg/40 bg-cover bg-center text-xs text-subtle"
+              style={product?.image ? { backgroundImage: `url(${product.image})` } : undefined}
+            >
+              {!product?.image && "Product image — coming soon"}
+            </div>
+            {product ? (
+              <div className="mt-3">
+                <p className="text-sm font-medium text-fg">{product.name}</p>
+                <p className="mt-1 text-xs text-muted">{product.pitch}</p>
+                {product.intent && (
+                  <p className="mt-1.5 text-xs text-subtle"><span className="font-medium text-muted">Intent:</span> {product.intent}</p>
+                )}
+              </div>
+            ) : (
+              <p className="mt-3 text-xs text-subtle">
+                Pick a supplier from the dropdown to load the tailored call script and the HVN product we&apos;re pitching them.
+              </p>
+            )}
+          </div>
+
+          {/* Lead identity */}
+          <div className="panel p-4">
+            <h2 className="mb-3 text-sm font-semibold text-fg">Lead</h2>
+            <div className="grid grid-cols-2 gap-2.5">
+              {IDENTITY.map((f) => (
+                <label key={f.k} className="flex flex-col gap-1 text-xs text-subtle">
+                  {f.label}
+                  <input
+                    type={f.type ?? "text"}
+                    value={(form[f.k] as string) ?? ""}
+                    onChange={(e) => set(f.k, e.target.value)}
+                    className={inputCls}
+                  />
+                </label>
+              ))}
+              <label className="flex flex-col gap-1 text-xs text-subtle">
+                Category
+                <select value={form.category ?? ""} onChange={(e) => set("category", e.target.value)} className={inputCls}>
+                  {CATEGORIES.map((c) => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            {form.phone && (
+              <a href={`tel:${form.phone}`} className="mt-3 inline-flex items-center gap-1.5 rounded-md border border-gold/40 px-3 py-1.5 text-sm text-gold hover:bg-gold/10">
+                <PhoneCall size={14} /> Call {form.phone}
+              </a>
+            )}
+          </div>
+
           <div className="panel p-4">
             <h2 className="mb-3 text-sm font-semibold text-fg">Capture</h2>
             <div className="grid grid-cols-2 gap-2.5">
