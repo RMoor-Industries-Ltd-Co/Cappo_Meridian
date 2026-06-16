@@ -3,6 +3,7 @@ import { Scale, FileText, ChevronRight } from "lucide-react";
 import { DomainModule } from "@/components/modules/DomainModule";
 import { Card, SectionTitle } from "@/components/ui/Card";
 import { getLegalDocsByEntity, isNotConnected, type LegalGroup } from "@/lib/connectors/driveFs";
+import { SyncButton } from "./SyncButton";
 
 export const dynamic = "force-dynamic";
 
@@ -22,7 +23,12 @@ export default async function LegalPage() {
       <Card className="p-5">
         <SectionTitle
           title="Legal Documents"
-          action={<span className="text-xs text-subtle">{total} finalized · from Drive</span>}
+          action={
+            <span className="flex items-center gap-3">
+              <span className="text-xs text-subtle">{total} finalized · from Drive</span>
+              <SyncButton />
+            </span>
+          }
         />
         {notConnected ? (
           <div className="flex flex-col items-center gap-2 py-8 text-center">

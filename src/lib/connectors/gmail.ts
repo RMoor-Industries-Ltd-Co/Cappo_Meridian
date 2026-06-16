@@ -1,4 +1,4 @@
-import { google } from "googleapis";
+import { google, type gmail_v1 } from "googleapis";
 import { isGoogleConfigured } from "@/lib/env";
 import type { ConnectorStatus, UnifiedItem } from "@/lib/types";
 import { type Connector, notConfigured } from "./connector";
@@ -162,4 +162,42 @@ export async function gmailTrash(ids: string[]): Promise<void> {
   const gmail = await gmailClient();
   if (!gmail) throw new Error("Gmail not connected");
   for (const id of ids) await gmail.users.messages.trash({ userId: "me", id });
+}
+
+function flattenParts(payload?: gmail_v1.Schema$MessagePart): gmail_v1.Schema$MessagePart[] {
+  if (!payload) return [];
+  let out = [payload];
+  for (const p of payload.parts ?? []) out = out.concat(flattenParts(p));
+  return out;
+}
+
+/** Pull the signed-copy PDF attachments (e.g. PandaDoc) from the mailbox, deduped by filename. */
+export async function gmailFetchSignedDocs(
+  max = 50,
+): Promise<{ filename: string; mimeType: string; data: Buffer }[]> {
+  const gmail = await gmailClient();
+  if (!gmail) return [];
+  const list = await gmail.users.messages.list({
+    userId: "me",
+    maxResults: max,
+    q: 'has:attachment filename:pdf subject:"signed copy"',
+  });
+  const out: { filename: string; mimeType: string; data: Buffer }[] = [];
+  const seen = new Set<string>();
+  for (const m of list.data.messages ?? []) {
+    const msg = await gmail.users.messages.get({ userId: "me", id: m.id!, format: "full" });
+    for (const p of flattenParts(msg.data.payload ?? undefined)) {
+      const fn = p.filename ?? "";
+      const attId = p.body?.attachmentId;
+      if (!fn || !attId || !fn.toLowerCase().endsWith(".pdf") || seen.has(fn)) continue;
+      const att = await gmail.users.messages.attachments.get({ userId: "me", messageId: m.id!, id: attId });
+      out.push({
+        filename: fn,
+        mimeType: p.mimeType ?? "application/pdf",
+        data: Buffer.from(att.data.data ?? "", "base64url"),
+      });
+      seen.add(fn);
+    }
+  }
+  return out;
 }

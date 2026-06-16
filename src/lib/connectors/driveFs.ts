@@ -123,15 +123,50 @@ async function walkLegal(
  * and bucketed per entity (AMG / HVN / 3E / RMI). Entity comes from the file/subfolder name
  * when it names one, else the source folder's default entity.
  */
+// Folder in the connector account's Drive where Cappo files signed docs harvested from email.
+export const HARVEST_FOLDER = "Legal — Signed (Cappo)";
+
 export async function getLegalDocsByEntity(): Promise<LegalGroup[]> {
   const drive = await client();
   const collected: { entity: string; item: DriveItem }[] = [];
   for (const root of LEGAL_ROOTS) await walkLegal(drive, root.id, root.entity, collected);
+  // Include the harvest folder (signed docs filed from email), if it exists.
+  try {
+    const hv = await drive.files.list({
+      q: `name = '${HARVEST_FOLDER}' and mimeType = '${FOLDER_MIME}' and trashed = false`,
+      fields: "files(id)",
+      pageSize: 1,
+      supportsAllDrives: true,
+      includeItemsFromAllDrives: true,
+    });
+    const hid = hv.data.files?.[0]?.id;
+    if (hid) await walkLegal(drive, hid, "AMG", collected);
+  } catch {
+    /* harvest folder absent — ignore */
+  }
   const groups: LegalGroup[] = LEGAL_ENTITIES.map((e) => ({ key: e.key, label: e.label, docs: [] }));
+  const seen = new Set<string>();
   for (const { entity, item } of collected) {
+    const key = item.name.trim().toLowerCase();
+    if (seen.has(key)) continue; // collapse the same doc appearing in more than one source folder
+    seen.add(key);
     (groups.find((g) => g.key === entity) ?? groups[0]).docs.push(item);
   }
   return groups;
+}
+
+/** Find a folder by name under a parent, creating it if missing. */
+export async function driveEnsureFolder(name: string, parentId = "root"): Promise<DriveItem> {
+  const drive = await client();
+  const res = await drive.files.list({
+    q: `name = '${name.replace(/'/g, "\\'")}' and mimeType = '${FOLDER_MIME}' and '${parentId}' in parents and trashed = false`,
+    fields: "files(id,name,mimeType,modifiedTime,webViewLink,iconLink)",
+    pageSize: 1,
+    supportsAllDrives: true,
+    includeItemsFromAllDrives: true,
+  });
+  const found = res.data.files?.[0];
+  return found ? toItem(found) : driveCreateFolder(name, parentId);
 }
 
 /** List children of a folder (folders first, then files by name). */
