@@ -235,6 +235,21 @@ export async function driveTrash(fileId: string): Promise<void> {
   });
 }
 
+/** Full-text search across Drive files (name or content). */
+export async function driveSearch(query: string, maxResults = 20): Promise<DriveItem[]> {
+  const drive = await client();
+  const q = `fullText contains '${query.replace(/'/g, "\\'")}' and trashed = false`;
+  const { data } = await drive.files.list({
+    q,
+    orderBy: "relevance",
+    pageSize: maxResults,
+    fields: "files(id,name,mimeType,modifiedTime,size,webViewLink,iconLink)",
+    supportsAllDrives: true,
+    includeItemsFromAllDrives: true,
+  });
+  return (data.files ?? []).map(toItem);
+}
+
 export async function driveUpload(
   parentId: string,
   name: string,

@@ -164,6 +164,40 @@ export async function gmailTrash(ids: string[]): Promise<void> {
   for (const id of ids) await gmail.users.messages.trash({ userId: "me", id });
 }
 
+function buildRawMime(to: string, subject: string, body: string): string {
+  const lines = [
+    `To: ${to}`,
+    `Subject: ${subject}`,
+    `MIME-Version: 1.0`,
+    `Content-Type: text/plain; charset="UTF-8"`,
+    ``,
+    body,
+  ].join("\r\n");
+  return Buffer.from(lines).toString("base64url");
+}
+
+/** Create a Gmail draft. Returns the draft id. */
+export async function gmailCreateDraft(to: string, subject: string, body: string): Promise<string> {
+  const gmail = await gmailClient();
+  if (!gmail) throw new Error("Gmail not connected");
+  const { data } = await gmail.users.drafts.create({
+    userId: "me",
+    requestBody: { message: { raw: buildRawMime(to, subject, body) } },
+  });
+  return data.id ?? "";
+}
+
+/** Send an email immediately. Returns the sent message id. */
+export async function gmailSend(to: string, subject: string, body: string): Promise<string> {
+  const gmail = await gmailClient();
+  if (!gmail) throw new Error("Gmail not connected");
+  const { data } = await gmail.users.messages.send({
+    userId: "me",
+    requestBody: { raw: buildRawMime(to, subject, body) },
+  });
+  return data.id ?? "";
+}
+
 function flattenParts(payload?: gmail_v1.Schema$MessagePart): gmail_v1.Schema$MessagePart[] {
   if (!payload) return [];
   let out = [payload];

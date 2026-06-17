@@ -11,7 +11,11 @@ import {
   ArrowUp,
   Plus,
   Trash2,
-  Zap,
+  Pencil,
+  Check,
+  X,
+  Paperclip,
+  Loader2,
 } from "lucide-react";
 import { Starburst } from "@/components/brand/Starburst";
 
@@ -34,11 +38,19 @@ interface ProviderOpt {
   configured: boolean;
   models: ModelOpt[];
 }
+interface Attachment {
+  uid: string;
+  name: string;
+  mimeType: string;
+  status: "uploading" | "ready" | "error";
+  driveUrl?: string;
+  errorMsg?: string;
+}
 
 const SUGGESTIONS = [
-  "Draft a Q3 go-to-market plan for AMG",
-  "Summarize the competitive landscape for our category",
-  "What KPIs should we track across the dashboard modules?",
+  "What's on the AMG ClickUp board right now?",
+  "Search the inbox for any unread messages from vendors",
+  "Research the top 3 competitors in our category",
 ];
 
 export default function AiPage() {
@@ -52,13 +64,17 @@ export default function AiPage() {
   const [providers, setProviders] = useState<ProviderOpt[]>([]);
   const [provider, setProvider] = useState("claude");
   const [model, setModel] = useState("");
-  const [actMode, setActMode] = useState(false); // when on, Cappo can act (ClickUp tools), not just chat
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState("");
+
   const scrollRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const activeProvider = providers.find((p) => p.id === provider);
-  const activeLabel = activeProvider?.label ?? "Claude";
+  const activeLabel = activeProvider?.label ?? "Cappo";
+  const isCappo = provider === "claude" || !provider;
 
-  // Load the available AI providers (Claude / Perplexity / GPT) for the selector.
   useEffect(() => {
     fetch("/api/ai/providers")
       .then((r) => r.json())
@@ -74,13 +90,11 @@ export default function AiPage() {
       .catch(() => {});
   }, []);
 
-  // Switch provider and reset to that provider's default model.
   function changeProvider(id: string) {
     setProvider(id);
     setModel(providers.find((p) => p.id === id)?.model ?? "");
   }
 
-  // Load projects on mount (async — only sets state after the fetch resolves).
   useEffect(() => {
     fetch("/api/ai/projects")
       .then((r) => r.json())
@@ -92,7 +106,6 @@ export default function AiPage() {
       .catch(() => {});
   }, []);
 
-  // Load a project's conversation when it becomes active.
   useEffect(() => {
     if (!activeId) return;
     let cancelled = false;
@@ -103,9 +116,7 @@ export default function AiPage() {
           setMessages((d.messages ?? []).map((m) => ({ role: m.role, content: m.content })));
       })
       .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [activeId]);
 
   useEffect(() => {
@@ -136,25 +147,86 @@ export default function AiPage() {
     if (!confirm("Delete this project and its conversation?")) return;
     fetch(`/api/ai/projects/${id}`, { method: "DELETE" }).finally(() => {
       setProjects((p) => p.filter((x) => x.id !== id));
-      if (activeId === id) {
-        setActiveId(null);
-        setMessages([]);
-      }
+      if (activeId === id) { setActiveId(null); setMessages([]); }
     });
+  }
+
+  function startRename(p: Project) {
+    setRenamingId(p.id);
+    setRenameValue(p.name);
+  }
+
+  function cancelRename() {
+    setRenamingId(null);
+    setRenameValue("");
+  }
+
+  async function commitRename(id: string) {
+    const name = renameValue.trim();
+    if (!name) return cancelRename();
+    const res = await fetch(`/api/ai/projects/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
+    });
+    const d = await res.json().catch(() => ({}));
+    if (d.project) {
+      setProjects((ps) => ps.map((p) => (p.id === id ? { ...p, name: d.project.name } : p)));
+    }
+    cancelRename();
+  }
+
+  function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files ?? []);
+    e.target.value = "";
+    for (const file of files) {
+      const uid = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      const att: Attachment = { uid, name: file.name, mimeType: file.type, status: "uploading" };
+      setAttachments((a) => [...a, att]);
+
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("parent", "root");
+      fetch("/api/drive/upload", { method: "POST", body: fd })
+        .then((r) => r.json())
+        .then((d) => {
+          if (d?.item?.webViewLink) {
+            setAttachments((a) =>
+              a.map((x) => x.uid === uid ? { ...x, status: "ready", driveUrl: d.item.webViewLink } : x)
+            );
+          } else {
+            setAttachments((a) => a.map((x) => x.uid === uid ? { ...x, status: "error", errorMsg: "Upload failed" } : x));
+          }
+        })
+        .catch(() => {
+          setAttachments((a) => a.map((x) => x.uid === uid ? { ...x, status: "error", errorMsg: "Upload failed" } : x));
+        });
+    }
+  }
+
+  function removeAttachment(uid: string) {
+    setAttachments((a) => a.filter((x) => x.uid !== uid));
   }
 
   async function send(text: string) {
     const trimmed = text.trim();
-    if (!trimmed || streaming) return;
+    if ((!trimmed && attachments.length === 0) || streaming) return;
 
-    // In persistent mode, ensure there's a project to save into.
+    // Append attachment links to message text
+    const readyAtts = attachments.filter((a) => a.status === "ready");
+    let fullText = trimmed;
+    if (readyAtts.length) {
+      fullText += "\n\n" + readyAtts.map((a) => `📎 [${a.name}](${a.driveUrl})`).join("\n");
+    }
+    setAttachments([]);
+
     let pid = activeId;
     if (persistent && !pid) {
-      pid = await createProject(trimmed.slice(0, 48));
+      pid = await createProject(fullText.slice(0, 48));
       if (pid) setActiveId(pid);
     }
 
-    const next: ChatMessage[] = [...messages, { role: "user", content: trimmed }];
+    const next: ChatMessage[] = [...messages, { role: "user", content: fullText }];
     setMessages([...next, { role: "assistant", content: "" }]);
     setInput("");
     setStreaming(true);
@@ -167,8 +239,8 @@ export default function AiPage() {
         return copy;
       });
 
-    // Act mode: agentic, non-streamed — Cappo may use tools to actually do the work.
-    if (actMode) {
+    // Claude always uses the act (tool-use) path; other providers stream.
+    if (isCappo) {
       try {
         const res = await fetch("/api/ai/act", {
           method: "POST",
@@ -211,6 +283,7 @@ export default function AiPage() {
   }
 
   const empty = messages.length === 0;
+  const hasUploading = attachments.some((a) => a.status === "uploading");
 
   return (
     <div className="flex h-[calc(100dvh-7rem)] gap-4 pt-2">
@@ -232,10 +305,7 @@ export default function AiPage() {
                   <Plus size={15} /> New research project
                 </button>
                 <button
-                  onClick={() => {
-                    setActiveId(null);
-                    setMessages([]);
-                  }}
+                  onClick={() => { setActiveId(null); setMessages([]); }}
                   className={`mb-1 flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-sm ${activeId === null ? "bg-gold/15 text-gold" : "text-muted hover:bg-white/5 hover:text-fg"}`}
                 >
                   <Sparkles size={15} className="shrink-0" /> New chat
@@ -243,15 +313,49 @@ export default function AiPage() {
                 {projects.map((p) => (
                   <div
                     key={p.id}
-                    className={`group flex items-center gap-2 rounded-lg px-2 py-2 text-sm ${activeId === p.id ? "bg-gold/15" : "hover:bg-white/5"}`}
+                    className={`group flex items-center gap-1 rounded-lg px-2 py-1.5 text-sm ${activeId === p.id ? "bg-gold/15" : "hover:bg-white/5"}`}
                   >
-                    <button onClick={() => setActiveId(p.id)} className="flex min-w-0 flex-1 items-center gap-2 text-left text-fg">
-                      <Folder size={15} className="shrink-0 text-gold" />
-                      <span className="truncate">{p.name}</span>
-                    </button>
-                    <button onClick={() => removeProject(p.id)} className="shrink-0 text-subtle opacity-0 transition-opacity hover:text-neg group-hover:opacity-100" title="Delete">
-                      <Trash2 size={13} />
-                    </button>
+                    {renamingId === p.id ? (
+                      <div className="flex flex-1 items-center gap-1">
+                        <input
+                          autoFocus
+                          value={renameValue}
+                          onChange={(e) => setRenameValue(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") commitRename(p.id);
+                            if (e.key === "Escape") cancelRename();
+                          }}
+                          className="min-w-0 flex-1 rounded border border-gold bg-transparent px-1.5 py-0.5 text-xs text-fg focus:outline-none"
+                        />
+                        <button onClick={() => commitRename(p.id)} className="shrink-0 text-gold hover:text-fg">
+                          <Check size={12} />
+                        </button>
+                        <button onClick={cancelRename} className="shrink-0 text-subtle hover:text-fg">
+                          <X size={12} />
+                        </button>
+                      </div>
+                    ) : (
+                      <>
+                        <button onClick={() => setActiveId(p.id)} className="flex min-w-0 flex-1 items-center gap-2 text-left text-fg">
+                          <Folder size={15} className="shrink-0 text-gold" />
+                          <span className="truncate">{p.name}</span>
+                        </button>
+                        <button
+                          onClick={() => startRename(p)}
+                          className="shrink-0 text-subtle opacity-0 transition-opacity hover:text-muted group-hover:opacity-100"
+                          title="Rename"
+                        >
+                          <Pencil size={12} />
+                        </button>
+                        <button
+                          onClick={() => removeProject(p.id)}
+                          className="shrink-0 text-subtle opacity-0 transition-opacity hover:text-neg group-hover:opacity-100"
+                          title="Delete"
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      </>
+                    )}
                   </div>
                 ))}
                 {projects.length === 0 && (
@@ -275,13 +379,6 @@ export default function AiPage() {
             {activeId ? projects.find((p) => p.id === activeId)?.name ?? "AI Workspace" : "AI Workspace"}
           </h1>
           <div className="ml-auto flex items-center gap-2">
-            <button
-              onClick={() => setActMode((v) => !v)}
-              className={`flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-medium transition-colors ${actMode ? "border-gold bg-gold/15 text-gold" : "border-border text-muted hover:text-fg"}`}
-              title="When on, Cappo can ACT — create/update AMG ClickUp tasks — not just chat"
-            >
-              <Zap size={13} /> {actMode ? "Acting" : "Act"}
-            </button>
             <span className="text-[10px] uppercase tracking-wide text-subtle">AI</span>
             <select
               value={provider}
@@ -316,9 +413,13 @@ export default function AiPage() {
             <div className="flex h-full flex-col items-center justify-center gap-5 text-center">
               <Starburst size={48} className="text-gold" />
               <div className="max-w-md">
-                <h2 className="text-lg font-semibold text-fg">AI research, powered by {activeLabel}</h2>
+                <h2 className="text-lg font-semibold text-fg">
+                  {isCappo ? "CAPPO — AMG Operations AI" : `AI research, powered by ${activeLabel}`}
+                </h2>
                 <p className="mt-2 text-sm text-subtle">
-                  Ask anything — strategy, analysis, drafting. Switch models with the selector top-right.
+                  {isCappo
+                    ? "Ask or tell Cappo anything — he can read and update ClickUp, organise your Gmail, search Drive and Notion, and browse the web."
+                    : "Ask anything — strategy, analysis, drafting."}
                   {persistent ? " Conversations are saved to your projects." : ""}
                 </p>
               </div>
@@ -343,7 +444,11 @@ export default function AiPage() {
                       {m.content ? (
                         <ReactMarkdown remarkPlugins={[remarkGfm]}>{m.content}</ReactMarkdown>
                       ) : (
-                        streaming && i === messages.length - 1 && <span className="text-subtle">…</span>
+                        streaming && i === messages.length - 1 && (
+                          <span className="flex items-center gap-1.5 text-subtle">
+                            <Loader2 size={13} className="animate-spin" /> Working…
+                          </span>
+                        )
                       )}
                     </div>
                   )}
@@ -354,7 +459,52 @@ export default function AiPage() {
         </div>
 
         <div className="border-t border-border p-4">
-          <div className="mx-auto flex max-w-3xl items-end gap-2 rounded-xl border border-border bg-panel px-4 py-2.5">
+          {/* Attachment chips */}
+          {attachments.length > 0 && (
+            <div className="mx-auto mb-2 flex max-w-3xl flex-wrap gap-1.5">
+              {attachments.map((a) => (
+                <div
+                  key={a.uid}
+                  className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs ${
+                    a.status === "error"
+                      ? "border-neg/40 text-neg"
+                      : a.status === "uploading"
+                      ? "border-border text-subtle"
+                      : "border-gold/40 text-muted"
+                  }`}
+                >
+                  {a.status === "uploading" ? (
+                    <Loader2 size={11} className="animate-spin" />
+                  ) : (
+                    <Paperclip size={11} />
+                  )}
+                  <span className="max-w-[140px] truncate">{a.name}</span>
+                  <button onClick={() => removeAttachment(a.uid)} className="ml-0.5 text-subtle hover:text-fg">
+                    <X size={10} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="mx-auto flex max-w-3xl items-end gap-2 rounded-xl border border-border bg-panel px-3 py-2.5">
+            {/* Hidden file input */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.txt,.csv,.xlsx,.xls,.pptx,.ppt"
+              className="hidden"
+              onChange={handleFileSelect}
+            />
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="shrink-0 text-subtle hover:text-muted"
+              title="Attach file"
+              disabled={streaming}
+            >
+              <Paperclip size={16} />
+            </button>
             <textarea
               rows={1}
               value={input}
@@ -365,21 +515,21 @@ export default function AiPage() {
                   send(input);
                 }
               }}
-              placeholder={actMode ? "Tell Cappo to do something in AMG (create/update tasks)…" : `Ask ${activeLabel} to research…`}
+              placeholder={isCappo ? "Ask Cappo anything or tell him to take action…" : `Ask ${activeLabel} to research…`}
               className="max-h-40 flex-1 resize-none bg-transparent text-sm text-fg placeholder:text-subtle focus:outline-none"
             />
             <button
               onClick={() => send(input)}
-              disabled={!input.trim() || streaming}
+              disabled={(!input.trim() && attachments.length === 0) || streaming || hasUploading}
               className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg btn-gold disabled:opacity-40"
               title="Send"
             >
-              <ArrowUp size={16} />
+              {streaming ? <Loader2 size={14} className="animate-spin" /> : <ArrowUp size={16} />}
             </button>
           </div>
           <p className="mx-auto mt-1.5 max-w-3xl text-center text-[11px] text-subtle">
-            {activeLabel} can be wrong — verify important facts.
-            {persistent ? "" : " Conversations aren’t saved (no database)."}
+            {isCappo ? "Cappo can act on AMG systems — verify before sharing externally." : `${activeLabel} can be wrong — verify important facts.`}
+            {persistent ? "" : " Conversations aren't saved (no database)."}
           </p>
         </div>
       </section>

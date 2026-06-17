@@ -153,6 +153,18 @@ export async function deleteProject(id: string): Promise<void> {
   await p.query(`DELETE FROM research_projects WHERE id = $1`, [id]);
 }
 
+export async function renameProject(id: string, name: string): Promise<ResearchProject | null> {
+  const p = await db();
+  if (!p) return null;
+  const { rows } = await p.query<ResearchProject>(
+    `UPDATE research_projects SET name = $1, updated_at = now()
+       WHERE id = $2
+       RETURNING id::text, name, created_by, created_at, updated_at`,
+    [name, id],
+  );
+  return rows[0] ?? null;
+}
+
 export async function listMessages(projectId: string): Promise<ResearchMessage[]> {
   const p = await db();
   if (!p) return [];

@@ -4,7 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { useState } from "react";
 import { usePathname } from "next/navigation";
-import { Settings, LifeBuoy, LogOut } from "lucide-react";
+import { Settings, BookOpen, LogOut } from "lucide-react";
 import { NAV_ITEMS } from "@/lib/nav";
 import { AmgMark } from "@/components/brand/AmgLogo";
 import { signOutAction } from "@/lib/actions/auth";
@@ -54,12 +54,13 @@ export function Sidebar({ user }: { user?: SidebarUser | null }) {
       </nav>
 
       <div className="flex flex-col items-center gap-1">
-        <button
+        <Link
+          href="/lexicon"
+          title="Lexicon"
           className="flex h-10 w-10 items-center justify-center rounded-xl text-subtle hover:bg-white/5 hover:text-muted"
-          title="Support"
         >
-          <LifeBuoy size={19} strokeWidth={1.75} />
-        </button>
+          <BookOpen size={19} strokeWidth={1.75} />
+        </Link>
         <Link
           href="/settings"
           title="Settings"
