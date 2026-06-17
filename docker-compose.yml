@@ -6,9 +6,26 @@ services:
     # Prebuilt image from CI (GitHub Container Registry) — the server pulls,
     # never builds. For a local build use: docker build -t $IMAGE .
     image: ghcr.io/piaar/cappo-meridian:latest
-    env_file: .env
     environment:
       - TOKEN_STORE_PATH=/data/google-tokens.json
+      - APP_BASE_URL
+      - GOOGLE_WORKSPACE_DOMAIN
+      - CLICKUP_API_TOKEN
+      - CLICKUP_TEAM_ID
+      - CLICKUP_SPACE_ID
+      - NOTION_API_KEY
+      - GOOGLE_CLIENT_ID
+      - GOOGLE_CLIENT_SECRET
+      - GOOGLE_REDIRECT_URI
+      - AUTH_SECRET
+      - ANTHROPIC_API_KEY
+      - CLAUDE_API_KEY
+      - OPENAI_API_KEY
+      - OPENAI_MODEL
+      - PERPLEXITY_API_KEY
+      - PERPLEXITY_MODEL
+      - DATABASE_URL
+      - AGENT_API_KEY
     volumes:
       - cappo_data:/data
     expose:
@@ -20,7 +37,10 @@ services:
 
   db:
     image: postgres:17-alpine
-    env_file: .env # POSTGRES_USER / POSTGRES_PASSWORD / POSTGRES_DB
+    environment:
+      - POSTGRES_USER
+      - POSTGRES_PASSWORD
+      - POSTGRES_DB
     volumes:
       - cappo_db:/var/lib/postgresql/data
     healthcheck:

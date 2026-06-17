@@ -97,8 +97,8 @@ jobs:
             "cd /opt/cappo \
              && echo '${{ secrets.GITHUB_TOKEN }}' | docker login ghcr.io -u '${{ github.actor }}' --password-stdin \
              && docker compose pull \
-             && docker compose up -d --remove-orphans \
              && docker logout ghcr.io \
+             && ~/start-cappo.sh \
              && docker image prune -f"
 
       - name: Health check
