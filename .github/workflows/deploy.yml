@@ -92,14 +92,21 @@ jobs:
 
       - name: Pull image & restart
         if: steps.gate.outputs.ready == 'true'
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GHCR_ACTOR: ${{ github.actor }}
         run: |
-          ssh -i ~/.ssh/id_deploy "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" \
-            "cd /opt/cappo \
-             && echo '${{ secrets.GITHUB_TOKEN }}' | docker login ghcr.io -u '${{ github.actor }}' --password-stdin \
-             && docker compose pull \
-             && docker logout ghcr.io \
-             && ~/start-cappo.sh \
-             && docker image prune -f"
+          ssh -i ~/.ssh/id_deploy "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" bash << ENDSSH
+            set -euo pipefail
+            cd /opt/cappo
+            echo "${GHCR_TOKEN}" | docker login ghcr.io -u "${GHCR_ACTOR}" --password-stdin
+            docker compose pull
+            docker logout ghcr.io
+            export DOPPLER_TOKEN=\$(cat ~/.doppler-cappo-token)
+            export PATH="\$HOME/.local/bin:\$PATH"
+            doppler run -- docker compose up -d --remove-orphans
+            docker image prune -f
+          ENDSSH
 
       - name: Health check
         if: steps.gate.outputs.ready == 'true'
