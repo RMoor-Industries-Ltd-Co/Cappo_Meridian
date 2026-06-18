@@ -4,7 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { useState } from "react";
 import { usePathname } from "next/navigation";
-import { Settings, BookOpen, LogOut } from "lucide-react";
+import { Settings, LogOut } from "lucide-react";
 import { NAV_ITEMS } from "@/lib/nav";
 import { AmgMark } from "@/components/brand/AmgLogo";
 import { signOutAction } from "@/lib/actions/auth";
@@ -18,6 +18,7 @@ interface SidebarUser {
 export function Sidebar({ user }: { user?: SidebarUser | null }) {
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [imgError, setImgError] = useState(false);
 
   return (
     <aside className="flex w-16 shrink-0 flex-col items-center gap-1 border-r border-border bg-[var(--bg-elevated)]/60 py-4">
@@ -55,13 +56,6 @@ export function Sidebar({ user }: { user?: SidebarUser | null }) {
 
       <div className="flex flex-col items-center gap-1">
         <Link
-          href="/lexicon"
-          title="Lexicon"
-          className="flex h-10 w-10 items-center justify-center rounded-xl text-subtle hover:bg-white/5 hover:text-muted"
-        >
-          <BookOpen size={19} strokeWidth={1.75} />
-        </Link>
-        <Link
           href="/settings"
           title="Settings"
           className="flex h-10 w-10 items-center justify-center rounded-xl text-subtle hover:bg-white/5 hover:text-muted"
@@ -69,55 +63,58 @@ export function Sidebar({ user }: { user?: SidebarUser | null }) {
           <Settings size={19} strokeWidth={1.75} />
         </Link>
 
-        {user ? (
-          <div className="relative mt-1">
-            <button
-              onClick={() => setMenuOpen((v) => !v)}
-              className="block h-8 w-8 overflow-hidden rounded-full ring-1 ring-border-strong"
-              title={user.email ?? user.name ?? "Account"}
-              aria-haspopup="menu"
-              aria-expanded={menuOpen}
-            >
-              {user.image ? (
-                <Image
-                  src={user.image}
-                  alt={user.name ?? "Account"}
-                  width={32}
-                  height={32}
-                  className="h-8 w-8 object-cover"
-                />
-              ) : (
-                <span className="flex h-8 w-8 items-center justify-center bg-gradient-to-br from-gold-bright to-gold-deep text-xs font-semibold text-[#2a1f06]">
-                  {(user.name ?? user.email ?? "?").charAt(0).toUpperCase()}
-                </span>
-              )}
-            </button>
-
-            {menuOpen && (
-              <>
-                {/* click-away backdrop */}
-                <button
-                  aria-label="Close menu"
-                  onClick={() => setMenuOpen(false)}
-                  className="fixed inset-0 z-40 cursor-default"
-                />
-                <div className="absolute bottom-0 left-12 z-50 flex w-52 flex-col gap-2 rounded-lg border border-border bg-panel p-3 shadow-xl">
-                  <p className="truncate text-xs text-muted">{user.email}</p>
-                  <form action={signOutAction}>
-                    <button
-                      type="submit"
-                      className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs text-fg hover:bg-white/5"
-                    >
-                      <LogOut size={14} /> Sign out
-                    </button>
-                  </form>
-                </div>
-              </>
+        <div className="relative mt-1">
+          <button
+            onClick={() => setMenuOpen((v) => !v)}
+            className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full ring-1 ring-border-strong focus:outline-none"
+            title={user?.email ?? user?.name ?? "Account"}
+            aria-haspopup="menu"
+            aria-expanded={menuOpen}
+          >
+            {user?.image && !imgError ? (
+              <Image
+                src={user.image}
+                alt={user.name ?? "Account"}
+                width={32}
+                height={32}
+                className="h-8 w-8 object-cover"
+                onError={() => setImgError(true)}
+              />
+            ) : (
+              <span className="flex h-8 w-8 items-center justify-center bg-gradient-to-br from-gold-bright to-gold-deep text-xs font-semibold text-[#2a1f06]">
+                {(user?.name ?? user?.email ?? "A").charAt(0).toUpperCase()}
+              </span>
             )}
-          </div>
-        ) : (
-          <div className="mt-1 h-8 w-8 rounded-full bg-gradient-to-br from-gold-bright to-gold-deep" />
-        )}
+          </button>
+
+          {menuOpen && (
+            <>
+              {/* click-away backdrop */}
+              <button
+                aria-label="Close menu"
+                onClick={() => setMenuOpen(false)}
+                className="fixed inset-0 z-40 cursor-default"
+              />
+              <div className="absolute bottom-0 left-12 z-50 flex w-52 flex-col gap-2 rounded-lg border border-border bg-panel p-3 shadow-xl">
+                {user ? (
+                  <>
+                    <p className="truncate text-xs text-muted">{user.email ?? user.name ?? "Signed in"}</p>
+                    <form action={signOutAction}>
+                      <button
+                        type="submit"
+                        className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs text-fg hover:bg-white/5"
+                      >
+                        <LogOut size={14} /> Sign out
+                      </button>
+                    </form>
+                  </>
+                ) : (
+                  <p className="text-xs text-muted">Not signed in</p>
+                )}
+              </div>
+            </>
+          )}
+        </div>
       </div>
     </aside>
   );

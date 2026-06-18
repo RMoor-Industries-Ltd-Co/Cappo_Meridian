@@ -40,6 +40,8 @@ const schema = z.object({
   // Claude Code reserves ANTHROPIC_API_KEY in its env; CLAUDE_API_KEY is the
   // dev-only fallback so Claude can be validated inside a Claude Code session.
   CLAUDE_API_KEY: z.string().optional(),
+  // Override the default Claude model (defaults to claude-sonnet-4-6).
+  CLAUDE_MODEL: z.string().optional(),
 
   // OpenAI — optional AI provider on the AI page (model switcher)
   OPENAI_API_KEY: z.string().optional(),
