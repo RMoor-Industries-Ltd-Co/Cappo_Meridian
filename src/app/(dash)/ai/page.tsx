@@ -561,23 +561,9 @@ export default function AiPage() {
               rows={7}
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  send(input);
-                }
-              }}
               placeholder={isCappo ? "Ask Cappo anything or tell him to take action…" : `Ask ${activeLabel} to research…`}
               className="flex-1 resize-none bg-transparent text-sm text-fg placeholder:text-subtle focus:outline-none overflow-y-auto"
             />
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              className="shrink-0 text-subtle hover:text-muted"
-              title="Attach file (images, video, PDF, code, docs)"
-              disabled={streaming}
-            >
-              <Paperclip size={16} />
-            </button>
             <button
               onClick={() => send(input)}
               disabled={(!input.trim() && attachments.length === 0) || streaming || hasUploading}
@@ -585,6 +571,14 @@ export default function AiPage() {
               title="Send"
             >
               {streaming ? <Loader2 size={14} className="animate-spin" /> : <ArrowUp size={16} />}
+            </button>
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="shrink-0 text-subtle hover:text-muted"
+              title="Attach file (images, video, PDF, code, docs)"
+              disabled={streaming}
+            >
+              <Paperclip size={16} />
             </button>
           </div>
           <p className="mx-auto mt-1.5 max-w-3xl text-center text-[11px] text-subtle">
