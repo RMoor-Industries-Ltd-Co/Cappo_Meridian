@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import {
@@ -45,7 +45,16 @@ interface Attachment {
   status: "uploading" | "ready" | "error";
   driveUrl?: string;
   errorMsg?: string;
+  // Multimodal content read client-side for inline delivery to Claude
+  base64?: string;      // raw base64 for images and PDFs
+  textContent?: string; // decoded text for plain text / code files
 }
+
+/** File extensions treated as inline text/code for Claude. */
+const TEXT_EXTS = new Set([
+  "txt", "md", "csv", "json", "js", "jsx", "ts", "tsx", "py", "rb", "go",
+  "rs", "java", "c", "cpp", "cs", "php", "swift", "kt", "sh", "bash", "yaml", "yml", "toml", "xml", "html", "css",
+]);
 
 const SUGGESTIONS = [
   "What's on the AMG ClickUp board right now?",
@@ -70,6 +79,17 @@ export default function AiPage() {
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Auto-expand textarea up to 7 lines
+  useEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    const lineHeight = 20; // px — matches text-sm leading
+    el.style.height = `${Math.min(el.scrollHeight, lineHeight * 7)}px`;
+    el.style.overflowY = el.scrollHeight > lineHeight * 7 ? "auto" : "hidden";
+  }, [input]);
 
   const activeProvider = providers.find((p) => p.id === provider);
   const activeLabel = activeProvider?.label ?? "Cappo";
@@ -176,15 +196,43 @@ export default function AiPage() {
     cancelRename();
   }
 
-  function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
-    const files = Array.from(e.target.files ?? []);
+  function handleFileSelect(e: ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files ?? []) as File[];
     e.target.value = "";
     for (const file of files) {
       const uid = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
       const att: Attachment = { uid, name: file.name, mimeType: file.type, status: "uploading" };
       setAttachments((a) => [...a, att]);
 
-      const fd = new FormData();
+      // Read file content for inline multimodal delivery to Claude
+      const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
+      if (file.type.startsWith("image/")) {
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          const dataUrl = ev.target?.result as string;
+          const base64 = dataUrl.split(",")[1];
+          setAttachments((a) => a.map((x) => x.uid === uid ? { ...x, base64 } : x));
+        };
+        reader.readAsDataURL(file);
+      } else if (file.type === "application/pdf") {
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          const dataUrl = ev.target?.result as string;
+          const base64 = dataUrl.split(",")[1];
+          setAttachments((a) => a.map((x) => x.uid === uid ? { ...x, base64 } : x));
+        };
+        reader.readAsDataURL(file);
+      } else if (file.type.startsWith("text/") || TEXT_EXTS.has(ext)) {
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          const textContent = ev.target?.result as string;
+          setAttachments((a) => a.map((x) => x.uid === uid ? { ...x, textContent } : x));
+        };
+        reader.readAsText(file);
+      }
+      // Video / audio / unsupported binary: Drive link only (too large for inline)
+
+      const fd: FormData = new FormData();
       fd.append("file", file);
       fd.append("parent", "root");
       fetch("/api/drive/upload", { method: "POST", body: fd })
@@ -239,13 +287,33 @@ export default function AiPage() {
         return copy;
       });
 
+    // Build multimodal blocks for ready attachments (images, PDFs, text/code)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const attachmentBlocks: any[] = readyAtts.flatMap((a) => {
+      if (a.base64 && a.mimeType.startsWith("image/")) {
+        return [{ type: "image", mimeType: a.mimeType, base64: a.base64, name: a.name }];
+      }
+      if (a.base64 && a.mimeType === "application/pdf") {
+        return [{ type: "document", base64: a.base64, name: a.name }];
+      }
+      if (a.textContent) {
+        return [{ type: "text", content: a.textContent, name: a.name }];
+      }
+      return []; // video/audio: already in fullText as Drive link
+    });
+
     // Claude always uses the act (tool-use) path; other providers stream.
     if (isCappo) {
       try {
         const res = await fetch("/api/ai/act", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ messages: next, projectId: pid }),
+          body: JSON.stringify({
+            messages: next,
+            projectId: pid,
+            model: model || undefined,
+            attachmentBlocks: attachmentBlocks.length ? attachmentBlocks : undefined,
+          }),
         });
         const d = await res.json().catch(() => ({}));
         appendToLast(res.ok ? d.reply || "(no reply)" : `⚠️ ${d.error || res.statusText}`);
@@ -493,19 +561,12 @@ export default function AiPage() {
               ref={fileInputRef}
               type="file"
               multiple
-              accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.txt,.csv,.xlsx,.xls,.pptx,.ppt"
+              accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.txt,.csv,.xlsx,.xls,.pptx,.ppt,.js,.jsx,.ts,.tsx,.py,.rb,.go,.rs,.java,.c,.cpp,.cs,.php,.swift,.kt,.sh,.yaml,.yml,.toml,.xml,.html,.css,.md,.json"
               className="hidden"
               onChange={handleFileSelect}
             />
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              className="shrink-0 text-subtle hover:text-muted"
-              title="Attach file"
-              disabled={streaming}
-            >
-              <Paperclip size={16} />
-            </button>
             <textarea
+              ref={textareaRef}
               rows={1}
               value={input}
               onChange={(e) => setInput(e.target.value)}
@@ -516,8 +577,17 @@ export default function AiPage() {
                 }
               }}
               placeholder={isCappo ? "Ask Cappo anything or tell him to take action…" : `Ask ${activeLabel} to research…`}
-              className="max-h-40 flex-1 resize-none bg-transparent text-sm text-fg placeholder:text-subtle focus:outline-none"
+              className="flex-1 resize-none bg-transparent text-sm text-fg placeholder:text-subtle focus:outline-none"
+              style={{ overflowY: "hidden" }}
             />
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="shrink-0 text-subtle hover:text-muted"
+              title="Attach file (images, video, PDF, code, docs)"
+              disabled={streaming}
+            >
+              <Paperclip size={16} />
+            </button>
             <button
               onClick={() => send(input)}
               disabled={(!input.trim() && attachments.length === 0) || streaming || hasUploading}
