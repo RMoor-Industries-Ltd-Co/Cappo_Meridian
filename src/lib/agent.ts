@@ -17,7 +17,7 @@ import {
 } from "@/lib/connectors/gmail";
 import { driveList, driveSearch } from "@/lib/connectors/driveFs";
 
-const AI_MODEL = "claude-opus-4-8";
+const AI_MODEL = "claude-sonnet-4-6";
 
 function getAnthropic(): Anthropic | null {
   const key = env.ANTHROPIC_API_KEY || env.CLAUDE_API_KEY;
@@ -414,7 +414,7 @@ When the partner asks you to DO something — create a task, draft an email, fin
 
 /** Core tool-use loop shared by the ALLIE-delegation path and the dashboard chat. */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function runLoop(system: string, seed: any[]): Promise<string> {
+async function runLoop(system: string, seed: any[], model?: string): Promise<string> {
   const ai = getAnthropic();
   if (!ai) return "Cappo's AI is not configured (no Anthropic key on the AMG side).";
 
@@ -423,7 +423,7 @@ async function runLoop(system: string, seed: any[]): Promise<string> {
   let lastText = "";
   for (let i = 0; i < 8; i++) {
     const resp = await ai.messages.create({
-      model: AI_MODEL,
+      model: model || AI_MODEL,
       max_tokens: 4096,
       system,
       messages,
@@ -459,6 +459,15 @@ async function runLoop(system: string, seed: any[]): Promise<string> {
   return lastText || "(Cappo worked on it but couldn't finish cleanly.)";
 }
 
+/** A multimodal content block sent from the client alongside the last user message. */
+export interface AttachmentBlock {
+  type: "image" | "document" | "text";
+  mimeType?: string;
+  base64?: string;    // for image / document blocks
+  content?: string;   // for inline text/code blocks
+  name: string;
+}
+
 /** ALLIE delegation: a single self-contained AMG task. */
 export function runCappoAgent(task: string): Promise<string> {
   return runLoop(SYSTEM, [{ role: "user", content: `Task from ALLIE: ${task}` }]);
@@ -467,10 +476,32 @@ export function runCappoAgent(task: string): Promise<string> {
 /** Dashboard chat: a partner conversation — tools always available, Cappo acts automatically. */
 export function runCappoAgentChat(
   history: { role: "user" | "assistant"; content: string }[],
+  options?: { model?: string; attachmentBlocks?: AttachmentBlock[] },
 ): Promise<string> {
-  const seed = history
+  const filtered = history
     .filter((m) => m && (m.role === "user" || m.role === "assistant") && m.content)
-    .slice(-20)
-    .map((m) => ({ role: m.role, content: m.content }));
-  return runLoop(SYSTEM_DASH, seed);
+    .slice(-20);
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const seed: any[] = filtered.map((m, i) => {
+    // Inject multimodal blocks into the last user message
+    if (i === filtered.length - 1 && m.role === "user" && options?.attachmentBlocks?.length) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const blocks: any[] = options.attachmentBlocks.map((b) => {
+        if (b.type === "image" && b.base64 && b.mimeType) {
+          return { type: "image", source: { type: "base64", media_type: b.mimeType, data: b.base64 } };
+        }
+        if (b.type === "document" && b.base64) {
+          return { type: "document", source: { type: "base64", media_type: "application/pdf", data: b.base64 }, title: b.name };
+        }
+        // text/code: inline as a text block
+        return { type: "text", text: `\`\`\`\n// ${b.name}\n${b.content ?? ""}\n\`\`\`` };
+      });
+      blocks.push({ type: "text", text: m.content });
+      return { role: "user", content: blocks };
+    }
+    return { role: m.role, content: m.content };
+  });
+
+  return runLoop(SYSTEM_DASH, seed, options?.model);
 }

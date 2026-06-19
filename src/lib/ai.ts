@@ -43,7 +43,12 @@ const withSystem = (messages: ChatMessage[]) => [
 ];
 
 // ── Claude (Anthropic) ───────────────────────────────────────────
-const CLAUDE_MODEL = "claude-opus-4-8";
+const CLAUDE_DEFAULT_MODEL = "claude-sonnet-4-6";
+const CLAUDE_MODELS: AiModelOption[] = [
+  { id: "claude-sonnet-4-6", label: "Sonnet 4.6 (default)" },
+  { id: "claude-opus-4-8", label: "Opus 4.8 (most capable)" },
+  { id: "claude-haiku-4-5-20251001", label: "Haiku 4.5 (fastest)" },
+];
 // Claude Code reserves ANTHROPIC_API_KEY (won't inject it into the container),
 // so also accept CLAUDE_API_KEY for dev validation. Production uses ANTHROPIC_API_KEY.
 const claudeKey = () => env.ANTHROPIC_API_KEY || env.CLAUDE_API_KEY;
@@ -52,15 +57,15 @@ let anthropic: Anthropic | null = null;
 const claudeProvider: AiProvider = {
   id: "claude",
   label: "Claude",
-  model: CLAUDE_MODEL,
+  model: CLAUDE_DEFAULT_MODEL,
   envHint: "ANTHROPIC_API_KEY (or CLAUDE_API_KEY in Claude Code)",
+  models: CLAUDE_MODELS,
   isConfigured: () => Boolean(claudeKey()),
-  async streamChat(messages, onDelta) {
+  async streamChat(messages, onDelta, model) {
     if (!anthropic) anthropic = new Anthropic({ apiKey: claudeKey() });
     const run = anthropic.messages.stream({
-      model: CLAUDE_MODEL,
+      model: model || CLAUDE_DEFAULT_MODEL,
       max_tokens: 8000,
-      thinking: { type: "adaptive" },
       system: AI_SYSTEM_PROMPT,
       messages: messages.map((m) => ({ role: m.role, content: m.content })),
     });
@@ -103,19 +108,26 @@ const perplexityProvider: AiProvider = {
 };
 
 // ── GPT (OpenAI) ─────────────────────────────────────────────────
-const OPENAI_MODEL = env.OPENAI_MODEL || "gpt-4o";
+const OPENAI_DEFAULT_MODEL = env.OPENAI_MODEL || "gpt-4o";
+const OPENAI_MODELS: AiModelOption[] = [
+  { id: "gpt-4o", label: "GPT-4o" },
+  { id: "gpt-4o-mini", label: "GPT-4o mini (faster)" },
+  { id: "o1", label: "o1 (reasoning)" },
+  { id: "o1-mini", label: "o1 mini (reasoning lite)" },
+];
 let openai: OpenAI | null = null;
 
 const openaiProvider: AiProvider = {
   id: "openai",
   label: "GPT (OpenAI)",
-  model: OPENAI_MODEL,
+  model: OPENAI_DEFAULT_MODEL,
   envHint: "OPENAI_API_KEY",
+  models: OPENAI_MODELS,
   isConfigured: () => Boolean(env.OPENAI_API_KEY),
   async streamChat(messages, onDelta, model) {
     if (!openai) openai = new OpenAI({ apiKey: env.OPENAI_API_KEY });
     const stream = await openai.chat.completions.create({
-      model: model || OPENAI_MODEL,
+      model: model || OPENAI_DEFAULT_MODEL,
       stream: true,
       messages: withSystem(messages),
     });
