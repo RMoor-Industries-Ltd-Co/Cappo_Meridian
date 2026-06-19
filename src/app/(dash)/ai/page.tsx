@@ -81,15 +81,6 @@ export default function AiPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Auto-expand textarea up to 7 lines
-  useEffect(() => {
-    const el = textareaRef.current;
-    if (!el) return;
-    el.style.height = "auto";
-    const lineHeight = 20; // px — matches text-sm leading
-    el.style.height = `${Math.min(el.scrollHeight, lineHeight * 7)}px`;
-    el.style.overflowY = el.scrollHeight > lineHeight * 7 ? "auto" : "hidden";
-  }, [input]);
 
   const activeProvider = providers.find((p) => p.id === provider);
   const activeLabel = activeProvider?.label ?? "Cappo";
@@ -567,7 +558,7 @@ export default function AiPage() {
             />
             <textarea
               ref={textareaRef}
-              rows={1}
+              rows={7}
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => {
@@ -577,8 +568,7 @@ export default function AiPage() {
                 }
               }}
               placeholder={isCappo ? "Ask Cappo anything or tell him to take action…" : `Ask ${activeLabel} to research…`}
-              className="flex-1 resize-none bg-transparent text-sm text-fg placeholder:text-subtle focus:outline-none"
-              style={{ overflowY: "hidden" }}
+              className="flex-1 resize-none bg-transparent text-sm text-fg placeholder:text-subtle focus:outline-none overflow-y-auto"
             />
             <button
               onClick={() => fileInputRef.current?.click()}
