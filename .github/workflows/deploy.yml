@@ -95,33 +95,14 @@ jobs:
         env:
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GHCR_ACTOR: ${{ github.actor }}
-          DOPPLER_TOKEN_VAL: ${{ secrets.DOPPLER_CAPPO_TOKEN }}
         run: |
           ssh -i ~/.ssh/id_deploy "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" bash << ENDSSH
             set -euo pipefail
             cd /opt/cappo
-
-            # Pull updated image
             echo "${GHCR_TOKEN}" | docker login ghcr.io -u "${GHCR_ACTOR}" --password-stdin
             docker compose pull
             docker logout ghcr.io
-
-            # Write/refresh Doppler token from CI secret
-            if [ -n "${DOPPLER_TOKEN_VAL}" ]; then
-              printf '%s' "${DOPPLER_TOKEN_VAL}" > ~/.doppler-cappo-token
-              chmod 600 ~/.doppler-cappo-token
-            fi
-
-            # Install Doppler CLI if missing (no-root = ~/.local/bin)
-            export PATH="\$HOME/.local/bin:/usr/local/bin:\$PATH"
-            if ! command -v doppler &>/dev/null; then
-              curl -Ls --tlsv1.2 --proto "=https" https://cli.doppler.com/install.sh \
-                | sh -s -- --no-install-completion --no-root
-            fi
-
-            # Restart containers with Doppler-injected secrets
-            export DOPPLER_TOKEN=\$(cat ~/.doppler-cappo-token)
-            doppler run -- docker compose up -d --remove-orphans
+            ~/start-cappo.sh
             docker image prune -f
           ENDSSH
 
