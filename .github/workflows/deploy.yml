@@ -102,7 +102,21 @@ jobs:
             echo "${GHCR_TOKEN}" | docker login ghcr.io -u "${GHCR_ACTOR}" --password-stdin
             docker compose pull
             docker logout ghcr.io
-            ~/start-cappo.sh
+
+            # Use start-cappo.sh if present; otherwise fall back to doppler run inline
+            if [ -f ~/start-cappo.sh ]; then
+              ~/start-cappo.sh
+            else
+              DOPPLER_TOKEN=\$(cat ~/.doppler-cappo-token 2>/dev/null || true)
+              if [ -n "\$DOPPLER_TOKEN" ]; then
+                doppler run --token "\$DOPPLER_TOKEN" -- docker compose up -d --remove-orphans
+              else
+                echo "ERROR: start-cappo.sh missing and no ~/.doppler-cappo-token found." >&2
+                echo "SSH into the server and create ~/start-cappo.sh or add ~/.doppler-cappo-token" >&2
+                exit 1
+              fi
+            fi
+
             docker image prune -f
           ENDSSH
 
