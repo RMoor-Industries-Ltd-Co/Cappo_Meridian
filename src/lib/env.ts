@@ -11,6 +11,8 @@ const schema = z.object({
   // App
   APP_BASE_URL: z.string().url().default("http://localhost:3000"),
   GOOGLE_WORKSPACE_DOMAIN: z.string().default("apex-meridian-group.com"),
+  // Comma-separated personal emails always allowed to sign in (bypasses Workspace domain gate)
+  PARTNER_EMAILS: z.string().optional(),
 
   // ClickUp — personal API token (https://app.clickup.com/settings/apps)
   CLICKUP_API_TOKEN: z.string().optional(),
