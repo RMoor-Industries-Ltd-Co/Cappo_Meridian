@@ -43,7 +43,7 @@ const withSystem = (messages: ChatMessage[]) => [
 ];
 
 // ── Claude (Anthropic) ───────────────────────────────────────────
-const CLAUDE_DEFAULT_MODEL = "claude-sonnet-4-6";
+const CLAUDE_DEFAULT_MODEL = env.CLAUDE_MODEL || "claude-sonnet-4-6";
 const CLAUDE_MODELS: AiModelOption[] = [
   { id: "claude-sonnet-4-6", label: "Sonnet 4.6 (default)" },
   { id: "claude-opus-4-8", label: "Opus 4.8 (most capable)" },
@@ -112,8 +112,9 @@ const OPENAI_DEFAULT_MODEL = env.OPENAI_MODEL || "gpt-4o";
 const OPENAI_MODELS: AiModelOption[] = [
   { id: "gpt-4o", label: "GPT-4o" },
   { id: "gpt-4o-mini", label: "GPT-4o mini (faster)" },
+  { id: "gpt-4-turbo", label: "GPT-4 Turbo" },
   { id: "o1", label: "o1 (reasoning)" },
-  { id: "o1-mini", label: "o1 mini (reasoning lite)" },
+  { id: "o3", label: "o3" },
 ];
 let openai: OpenAI | null = null;
 

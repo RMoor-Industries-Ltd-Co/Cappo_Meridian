@@ -11,6 +11,7 @@ import {
   Scale,
   Mail,
   HardDrive,
+  BookOpen,
   type LucideIcon,
 } from "lucide-react";
 
@@ -36,4 +37,5 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/drive", label: "Drive", icon: HardDrive, blurb: "Browse and manage the AMG Google Drive — files & folders." },
   { href: "/legal", label: "Legal", icon: Scale, blurb: "Contracts, compliance, and entity documents." },
   { href: "/messages", label: "Messages", icon: Mail, blurb: "Unified email and team messages." },
+  { href: "/lexicon", label: "Lexicon", icon: BookOpen, blurb: "The AMG knowledge base — terms, frameworks, playbooks, and operating definitions." },
 ];

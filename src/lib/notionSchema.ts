@@ -5,6 +5,9 @@
  */
 export const AMG_HUB_PAGE = "c433a327db39459ab7325913a8fc9b37";
 
+/** The HVN Lexicon page — single page of toggle blocks, one per term. */
+export const HVN_LEXICON_PAGE = "35ae4a150469806bacf3d520191e555d";
+
 export const NOTION_DS = {
   bu: "f9142501-d297-4a98-85cc-abb18cbc6f68",
   domains: "dbef653f-0da4-4155-afe2-f85462fc5254",
