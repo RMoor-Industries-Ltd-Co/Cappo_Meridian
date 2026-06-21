@@ -73,7 +73,21 @@ export default function LexiconPage() {
       .finally(() => setLoading(false));
   }
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    let active = true;
+    fetch("/api/lexicon")
+      .then((r) => r.json())
+      .then((d: { configured: boolean; terms: LexiconTerm[]; error?: string }) => {
+        if (!active) return;
+        setConfigured(d.configured);
+        setTerms(d.terms ?? []);
+        if (d.terms?.length) setSelected(d.terms[0]);
+        if (d.error) setError(d.error);
+      })
+      .catch((e: Error) => { if (active) setError(e.message); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, []);
 
   const existingLetters = useMemo(
     () => new Set(terms.map((t) => t.name[0]?.toUpperCase())),
