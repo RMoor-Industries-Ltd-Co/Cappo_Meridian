@@ -10,7 +10,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  IMAGE: ghcr.io/piaar/cappo-meridian
+  IMAGE: ghcr.io/rmoor-industries-ltd-co/cappo-meridian
 
 jobs:
   # ── Health checks: typecheck, lint, production build ──────────────────
