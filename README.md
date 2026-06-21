@@ -70,15 +70,17 @@ See [`.env.example`](.env.example) for the full list. All credentials are option
 ### Google OAuth setup
 
 1. In Google Cloud Console, create an **OAuth 2.0 Client ID** (type: *Web application*).
-2. Add `http://localhost:3000/api/auth/google/callback` as an Authorized redirect URI.
+2. Add `http://localhost:3000/api/connectors/google/callback` as an Authorized
+   redirect URI (and the production `https://cappo.…/api/connectors/google/callback`).
 3. Enable the **Google Drive API** and **Gmail API** for the project.
 4. Set the three `GOOGLE_*` vars, run `pnpm dev`, and click **Connect Google** on a
    Drive/Gmail card.
 
-> **Token storage is dev-only.** Tokens are written to `.google-tokens.json`
-> (gitignored). For production, replace `loadTokens`/`saveTokens` in
-> [`src/lib/connectors/google.ts`](src/lib/connectors/google.ts) with a real,
-> encrypted, per-user datastore.
+> **Token storage.** When `DATABASE_URL` is set, OAuth tokens are persisted in
+> Postgres (`google_tokens` table), encrypted at rest with AES-256-GCM via
+> `SECRET_ENCRYPTION_KEY`. With no database (local dev) they fall back to a
+> gitignored `.google-tokens.json` file. See
+> [`src/lib/connectors/google.ts`](src/lib/connectors/google.ts).
 
 ## API
 
@@ -143,7 +145,8 @@ src/
 
 **Platform**
 - [ ] Dashboard auth/session (Google Workspace OAuth, gated to the AMG domain).
-- [ ] Persist OAuth tokens + connector config per user (Postgres, encrypted).
+- [x] Persist Google OAuth tokens in Postgres, encrypted at rest (shared
+      account; per-user rows are a future extension).
 - [ ] Wire each module's KPIs to live connector data (quarter-scoped).
 - [ ] Map ClickUp quarter folders/lists to the Overview quarter selector.
 - [ ] Write operations (create ClickUp tasks, Notion pages, send Gmail).
