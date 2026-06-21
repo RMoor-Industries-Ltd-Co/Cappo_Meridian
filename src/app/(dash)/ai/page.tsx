@@ -279,8 +279,7 @@ export default function AiPage() {
       });
 
     // Build multimodal blocks for ready attachments (images, PDFs, text/code)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const attachmentBlocks: any[] = readyAtts.flatMap((a) => {
+    const attachmentBlocks = readyAtts.flatMap((a): { type: string; mimeType?: string; base64?: string; content?: string; name: string }[] => {
       if (a.base64 && a.mimeType.startsWith("image/")) {
         return [{ type: "image", mimeType: a.mimeType, base64: a.base64, name: a.name }];
       }
