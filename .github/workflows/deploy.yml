@@ -97,7 +97,7 @@ jobs:
           GHCR_ACTOR: ${{ github.actor }}
           DOPPLER_TOKEN: ${{ secrets.DOPPLER_CAPPO_TOKEN }}
         run: |
-          ssh -i ~/.ssh/id_deploy "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" bash << ENDSSH
+          ssh -i ~/.ssh/id_deploy "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" bash -l << ENDSSH
             set -euo pipefail
             cd /opt/cappo
             echo "${GHCR_TOKEN}" | docker login ghcr.io -u "${GHCR_ACTOR}" --password-stdin
