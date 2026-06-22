@@ -564,6 +564,14 @@ export default function AiPage() {
               className="flex-1 resize-none bg-transparent text-sm text-fg placeholder:text-subtle focus:outline-none overflow-y-auto"
             />
             <button
+              onClick={() => fileInputRef.current?.click()}
+              className="shrink-0 text-subtle hover:text-muted"
+              title="Attach file (images, video, PDF, code, docs)"
+              disabled={streaming}
+            >
+              <Paperclip size={16} />
+            </button>
+            <button
               onClick={() => send(input)}
               disabled={(!input.trim() && attachments.length === 0) || streaming || hasUploading}
               className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg btn-gold disabled:opacity-40"

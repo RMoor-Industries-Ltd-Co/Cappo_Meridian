@@ -19,6 +19,8 @@ services:
       - GOOGLE_CLIENT_SECRET
       - GOOGLE_REDIRECT_URI
       - AUTH_SECRET
+      - AUTH_URL
+      - AUTH_TRUST_HOST
       - ANTHROPIC_API_KEY
       - CLAUDE_API_KEY
       - CLAUDE_MODEL
