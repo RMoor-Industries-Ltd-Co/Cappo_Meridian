@@ -95,6 +95,7 @@ jobs:
         env:
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GHCR_ACTOR: ${{ github.actor }}
+          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
         run: |
           ssh -i ~/.ssh/id_deploy "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" bash << ENDSSH
             set -euo pipefail
@@ -103,16 +104,19 @@ jobs:
             docker compose pull
             docker logout ghcr.io
 
-            # Use start-cappo.sh if present; otherwise fall back to doppler run inline
+            # Prefer start-cappo.sh; then GitHub-injected token; then local token file
             if [ -f ~/start-cappo.sh ]; then
               ~/start-cappo.sh
             else
-              DOPPLER_TOKEN=\$(cat ~/.doppler-cappo-token 2>/dev/null || true)
-              if [ -n "\$DOPPLER_TOKEN" ]; then
-                doppler run --token "\$DOPPLER_TOKEN" -- docker compose up -d --remove-orphans
+              _TOKEN="${DOPPLER_TOKEN}"
+              if [ -z "\$_TOKEN" ]; then
+                _TOKEN=\$(cat ~/.doppler-cappo-token 2>/dev/null || true)
+              fi
+              if [ -n "\$_TOKEN" ]; then
+                doppler run --token "\$_TOKEN" -- docker compose up -d --remove-orphans
               else
-                echo "ERROR: start-cappo.sh missing and no ~/.doppler-cappo-token found." >&2
-                echo "SSH into the server and create ~/start-cappo.sh or add ~/.doppler-cappo-token" >&2
+                echo "ERROR: No restart method found." >&2
+                echo "Fix: Add DOPPLER_TOKEN to GitHub repo secrets (Settings → Secrets → Actions)." >&2
                 exit 1
               fi
             fi
