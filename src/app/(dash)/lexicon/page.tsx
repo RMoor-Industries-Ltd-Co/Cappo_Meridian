@@ -9,6 +9,8 @@ interface Term {
   use: string;
   plain: string;
   example: string;
+  formula?: string;
+  image?: string;
 }
 
 const TERMS: Term[] = [
@@ -207,6 +209,16 @@ const TERMS: Term[] = [
     use: "Ember Line subcategory.",
     plain: "Sectioned incense.",
     example: "The Segmented Ember Line moves through the Note in measured stages.",
+  },
+  {
+    term: "Shadowed Oak Daylight",
+    meaning: "HVN's grounded day tone — masculine, weighted, warm, and livable without becoming airy or soft. This is daytime, but not soft.",
+    use: "HVN Tone System / visual direction language. Applied to daytime Appointment showcases, room scenes, product photography, social content, and any visual that requires controlled daylight with masculine weight.",
+    plain: "HVN's grounded daytime visual tone: dark oak + muted light.",
+    example: "shadowed oak daylight interior, masculine quiet-luxury room, dark oak and walnut surfaces, tobacco leather, muted cream stone, aged brass accents, soft daylight through heavy curtains, long architectural shadows, warm gray walls — not bright, not airy, not white.",
+    formula: "dark oak + walnut + tobacco leather + muted cream stone + aged brass + filtered daylight",
+    // Replace with a stable hosted URL (Google Drive public link or CDN). The Notion S3 presigned URL expires.
+    image: undefined,
   },
   {
     term: "Shadow Chamber",
@@ -425,10 +437,21 @@ export default function LexiconPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
           <div
             ref={modalRef}
-            className="relative w-full max-w-lg rounded-2xl border border-border-strong bg-panel shadow-2xl"
+            className="relative w-full max-w-lg rounded-2xl border border-border-strong bg-panel shadow-2xl max-h-[90dvh] overflow-y-auto"
           >
             {/* Gold top accent */}
             <div className="absolute inset-x-0 top-0 h-px rounded-t-2xl bg-gradient-to-r from-transparent via-gold/60 to-transparent" />
+
+            {/* Image */}
+            {selectedTerm.image && (
+              <div className="w-full overflow-hidden rounded-t-2xl">
+                <img
+                  src={selectedTerm.image}
+                  alt={selectedTerm.term}
+                  className="w-full object-cover max-h-56"
+                />
+              </div>
+            )}
 
             <div className="p-6">
               {/* Title + close */}
@@ -446,6 +469,14 @@ export default function LexiconPage() {
               </div>
 
               <div className="mt-5 flex flex-col gap-4">
+                {selectedTerm.formula && (
+                  <div className="rounded-lg border border-gold/20 bg-gold/5 px-3 py-2">
+                    <span className="block mb-0.5 text-xs font-semibold uppercase tracking-wider text-gold/60">
+                      Visual Formula
+                    </span>
+                    <p className="text-sm text-gold/90 font-medium">{selectedTerm.formula}</p>
+                  </div>
+                )}
                 <Row label="Meaning" value={selectedTerm.meaning} />
                 <Row label="Plain meaning" value={selectedTerm.plain} />
                 <Row label="Use" value={selectedTerm.use} />
