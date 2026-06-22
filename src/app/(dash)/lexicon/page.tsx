@@ -217,7 +217,7 @@ const TERMS: Term[] = [
     plain: "HVN's grounded daytime visual tone: dark oak + muted light.",
     example: "shadowed oak daylight interior, masculine quiet-luxury room, dark oak and walnut surfaces, tobacco leather, muted cream stone, aged brass accents, soft daylight through heavy curtains, long architectural shadows, warm gray walls — not bright, not airy, not white.",
     formula: "dark oak + walnut + tobacco leather + muted cream stone + aged brass + filtered daylight",
-    image: "https://drive.google.com/uc?export=view&id=1LgR2m6gLcgxLvRAblZbHXqZ0Neq3xSp7",
+    image: "https://lh3.googleusercontent.com/d/1LgR2m6gLcgxLvRAblZbHXqZ0Neq3xSp7",
   },
   {
     term: "Shadow Chamber",
