@@ -364,16 +364,12 @@ export default function LexiconPage() {
           <button
             onClick={() => setActiveLetter(null)}
             className={[
-              "min-w-[2rem] rounded px-2 py-1 text-sm font-medium transition-colors",
+              "min-w-[2rem] rounded px-2 py-1 text-sm font-medium transition-all",
+              "hover:[filter:drop-shadow(0_0_8px_rgba(232,184,75,0.65))]",
               activeLetter === null
-                ? "font-bold text-gold"
-                : "text-gold/50 hover:text-gold/80",
+                ? "font-bold text-gold [filter:drop-shadow(0_0_8px_rgba(232,184,75,0.7))]"
+                : "text-gold/50 hover:text-gold",
             ].join(" ")}
-            style={
-              activeLetter === null
-                ? { filter: "drop-shadow(0 0 8px rgba(232,184,75,0.7))" }
-                : undefined
-            }
           >
             All
           </button>
@@ -386,19 +382,14 @@ export default function LexiconPage() {
                 onClick={() => hasTerms && setActiveLetter(isActive ? null : letter)}
                 disabled={!hasTerms}
                 className={[
-                  "min-w-[1.75rem] rounded px-1.5 py-1 text-sm transition-colors",
+                  "min-w-[1.75rem] rounded px-1.5 py-1 text-sm transition-all",
                   hasTerms ? "cursor-pointer" : "cursor-default select-none",
                   isActive
-                    ? "font-bold text-gold"
+                    ? "font-bold text-gold [filter:drop-shadow(0_0_8px_rgba(232,184,75,0.7))]"
                     : hasTerms
-                    ? "font-medium text-gold/60 hover:text-gold/90"
+                    ? "font-medium text-gold/60 hover:text-gold hover:[filter:drop-shadow(0_0_8px_rgba(232,184,75,0.65))]"
                     : "text-gold/15",
                 ].join(" ")}
-                style={
-                  isActive
-                    ? { filter: "drop-shadow(0 0 8px rgba(232,184,75,0.7))" }
-                    : undefined
-                }
               >
                 {letter}
               </button>
