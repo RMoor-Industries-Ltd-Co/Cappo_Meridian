@@ -5,11 +5,12 @@ services:
   web:
     # Prebuilt image from CI (GitHub Container Registry) — the server pulls,
     # never builds. For a local build use: docker build -t $IMAGE .
-    image: ghcr.io/piaar/cappo-meridian:latest
+    image: ghcr.io/rmoor-industries-ltd-co/cappo-meridian:latest
     environment:
       - TOKEN_STORE_PATH=/data/google-tokens.json
       - APP_BASE_URL
       - GOOGLE_WORKSPACE_DOMAIN
+      - PARTNER_EMAILS
       - CLICKUP_API_TOKEN
       - CLICKUP_TEAM_ID
       - CLICKUP_SPACE_ID
@@ -22,12 +23,14 @@ services:
       - AUTH_TRUST_HOST
       - ANTHROPIC_API_KEY
       - CLAUDE_API_KEY
+      - CLAUDE_MODEL
       - OPENAI_API_KEY
       - OPENAI_MODEL
       - PERPLEXITY_API_KEY
       - PERPLEXITY_MODEL
       - DATABASE_URL
       - AGENT_API_KEY
+      - SECRET_ENCRYPTION_KEY
     volumes:
       - cappo_data:/data
     expose:

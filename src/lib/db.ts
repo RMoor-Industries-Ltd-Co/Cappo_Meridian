@@ -64,6 +64,12 @@ async function ensureSchema(p: Pool): Promise<void> {
           created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
         );
         CREATE INDEX IF NOT EXISTS idx_call_logs_supplier ON call_logs(supplier_id, id DESC);
+
+        CREATE TABLE IF NOT EXISTS google_tokens (
+          id           TEXT PRIMARY KEY,
+          data         TEXT NOT NULL,
+          updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+        );
       `)
       .then(() => undefined)
       .catch((e) => {
@@ -299,4 +305,26 @@ export async function setCallClickup(callId: string, url: string): Promise<void>
   const p = await db();
   if (!p) return;
   await p.query(`UPDATE call_logs SET clickup_url = $1 WHERE id = $2`, [url, callId]);
+}
+
+// ── Google OAuth tokens ──────────────────────────────────────────────
+// Opaque blob storage; callers encrypt/decrypt the payload (see crypto.ts).
+export async function saveGoogleToken(id: string, data: string): Promise<void> {
+  const p = await db();
+  if (!p) throw new Error("Database not configured");
+  await p.query(
+    `INSERT INTO google_tokens (id, data, updated_at) VALUES ($1, $2, now())
+       ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data, updated_at = now()`,
+    [id, data],
+  );
+}
+
+export async function loadGoogleToken(id: string): Promise<string | null> {
+  const p = await db();
+  if (!p) return null;
+  const { rows } = await p.query<{ data: string }>(
+    `SELECT data FROM google_tokens WHERE id = $1`,
+    [id],
+  );
+  return rows[0]?.data ?? null;
 }

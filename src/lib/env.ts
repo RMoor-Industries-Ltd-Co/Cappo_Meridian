@@ -11,6 +11,8 @@ const schema = z.object({
   // App
   APP_BASE_URL: z.string().url().default("http://localhost:3000"),
   GOOGLE_WORKSPACE_DOMAIN: z.string().default("apex-meridian-group.com"),
+  // Comma-separated personal emails always allowed to sign in (bypasses Workspace domain gate)
+  PARTNER_EMAILS: z.string().optional(),
 
   // ClickUp — personal API token (https://app.clickup.com/settings/apps)
   CLICKUP_API_TOKEN: z.string().optional(),
@@ -40,6 +42,8 @@ const schema = z.object({
   // Claude Code reserves ANTHROPIC_API_KEY in its env; CLAUDE_API_KEY is the
   // dev-only fallback so Claude can be validated inside a Claude Code session.
   CLAUDE_API_KEY: z.string().optional(),
+  // Override the default Claude model (defaults to claude-sonnet-4-6).
+  CLAUDE_MODEL: z.string().optional(),
 
   // OpenAI — optional AI provider on the AI page (model switcher)
   OPENAI_API_KEY: z.string().optional(),
@@ -56,6 +60,10 @@ const schema = z.object({
   // Machine-to-machine agent key — lets ALLIE (allen.i.verse) delegate AMG tasks to
   // Cappo's /api/agent server-to-server, separate from the human Google login.
   AGENT_API_KEY: z.string().optional(),
+
+  // Secret-at-rest key — encrypts Google OAuth tokens stored in Postgres
+  // (AES-256-GCM). Any passphrase works (SHA-256 derived). Set in production.
+  SECRET_ENCRYPTION_KEY: z.string().optional(),
 });
 
 const parsed = schema.safeParse(process.env);

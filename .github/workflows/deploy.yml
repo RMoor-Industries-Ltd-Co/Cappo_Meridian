@@ -10,7 +10,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  IMAGE: ghcr.io/piaar/cappo-meridian
+  IMAGE: ghcr.io/rmoor-industries-ltd-co/cappo-meridian
 
 jobs:
   # ── Health checks: typecheck, lint, production build ──────────────────
@@ -95,33 +95,31 @@ jobs:
         env:
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GHCR_ACTOR: ${{ github.actor }}
-          DOPPLER_TOKEN_VAL: ${{ secrets.DOPPLER_CAPPO_TOKEN }}
+          DOPPLER_TOKEN: ${{ secrets.DOPPLER_CAPPO_TOKEN }}
         run: |
-          ssh -i ~/.ssh/id_deploy "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" bash << ENDSSH
+          ssh -i ~/.ssh/id_deploy "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" bash -l << ENDSSH
             set -euo pipefail
             cd /opt/cappo
-
-            # Pull updated image
             echo "${GHCR_TOKEN}" | docker login ghcr.io -u "${GHCR_ACTOR}" --password-stdin
             docker compose pull
             docker logout ghcr.io
 
-            # Write/refresh Doppler token from CI secret
-            if [ -n "${DOPPLER_TOKEN_VAL}" ]; then
-              printf '%s' "${DOPPLER_TOKEN_VAL}" > ~/.doppler-cappo-token
-              chmod 600 ~/.doppler-cappo-token
+            # Prefer start-cappo.sh; then GitHub-injected token; then local token file
+            if [ -f ~/start-cappo.sh ]; then
+              ~/start-cappo.sh
+            else
+              _TOKEN="${DOPPLER_TOKEN}"
+              if [ -z "\$_TOKEN" ]; then
+                _TOKEN=\$(cat ~/.doppler-cappo-token 2>/dev/null || true)
+              fi
+              if [ -n "\$_TOKEN" ]; then
+                doppler run --token "\$_TOKEN" -- docker compose up -d --remove-orphans
+              else
+                echo "ERROR: No restart method found. Add DOPPLER_CAPPO_TOKEN to GitHub repo secrets." >&2
+                exit 1
+              fi
             fi
 
-            # Install Doppler CLI if missing (no-root = ~/.local/bin)
-            export PATH="\$HOME/.local/bin:/usr/local/bin:\$PATH"
-            if ! command -v doppler &>/dev/null; then
-              curl -Ls --tlsv1.2 --proto "=https" https://cli.doppler.com/install.sh \
-                | sh -s -- --no-install-completion --no-root
-            fi
-
-            # Restart containers with Doppler-injected secrets
-            export DOPPLER_TOKEN=\$(cat ~/.doppler-cappo-token)
-            doppler run -- docker compose up -d --remove-orphans
             docker image prune -f
           ENDSSH
 

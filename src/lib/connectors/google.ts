@@ -1,7 +1,9 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { google, type Auth } from "googleapis";
-import { env, isGoogleConfigured } from "@/lib/env";
+import { env, isGoogleConfigured, isDbConfigured } from "@/lib/env";
+import { loadGoogleToken, saveGoogleToken } from "@/lib/db";
+import { decryptSecret, encryptSecret } from "@/lib/crypto";
 
 // Use the google-auth-library types bundled with `googleapis` so they match the
 // clients passed to google.drive()/google.gmail() (avoids a duplicate copy).
@@ -11,13 +13,20 @@ type Credentials = Auth.Credentials;
 /**
  * Shared Google OAuth setup for the Drive and Gmail connectors.
  *
- * Token persistence here is a DEV-ONLY file store (`.google-tokens.json`, which
- * is gitignored). For production, swap `loadTokens`/`saveTokens` for a real
- * datastore (per-user rows in Postgres, encrypted at rest). See README.
+ * Token persistence: when a database is configured (DATABASE_URL) tokens are
+ * stored in Postgres, encrypted at rest (AES-256-GCM via SECRET_ENCRYPTION_KEY).
+ * Otherwise — local dev with no DB — they fall back to a gitignored JSON file.
+ *
+ * AMG uses a single shared Google Workspace account (the company Drive archive +
+ * Gmail), so tokens live under one row; the table is keyed so this can extend to
+ * per-user connections later.
  */
 
-// Configurable so production can persist tokens on a mounted volume
-// (TOKEN_STORE_PATH=/data/google-tokens.json) instead of the ephemeral cwd.
+// Single shared-account row key in the google_tokens table.
+const TOKEN_ID = "shared";
+
+// Dev fallback file. Configurable so a non-DB deploy can still persist on a
+// mounted volume (TOKEN_STORE_PATH=/data/google-tokens.json) vs the ephemeral cwd.
 const TOKEN_PATH =
   process.env.TOKEN_STORE_PATH || path.join(process.cwd(), ".google-tokens.json");
 
@@ -52,10 +61,23 @@ export function buildAuthUrl(): string {
 }
 
 export async function saveTokens(tokens: Credentials): Promise<void> {
+  if (isDbConfigured()) {
+    await saveGoogleToken(TOKEN_ID, encryptSecret(JSON.stringify(tokens)));
+    return;
+  }
   await fs.writeFile(TOKEN_PATH, JSON.stringify(tokens, null, 2), "utf8");
 }
 
 export async function loadTokens(): Promise<Credentials | null> {
+  if (isDbConfigured()) {
+    const stored = await loadGoogleToken(TOKEN_ID);
+    if (!stored) return null;
+    try {
+      return JSON.parse(decryptSecret(stored)) as Credentials;
+    } catch {
+      return null;
+    }
+  }
   try {
     return JSON.parse(await fs.readFile(TOKEN_PATH, "utf8")) as Credentials;
   } catch {
