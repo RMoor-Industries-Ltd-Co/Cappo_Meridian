@@ -436,58 +436,61 @@ export default function LexiconPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
           <div
             ref={modalRef}
-            className="relative w-full max-w-lg rounded-2xl border border-border-strong bg-panel shadow-2xl max-h-[90dvh] overflow-y-auto"
+            className="relative w-full max-w-2xl rounded-2xl border border-border-strong bg-panel shadow-2xl max-h-[90dvh] overflow-y-auto"
           >
             {/* Gold top accent */}
             <div className="absolute inset-x-0 top-0 h-px rounded-t-2xl bg-gradient-to-r from-transparent via-gold/60 to-transparent" />
 
-            {/* Image */}
-            {selectedTerm.image && (
-              <div className="w-full overflow-hidden rounded-t-2xl">
-                <img
-                  src={selectedTerm.image}
-                  alt={selectedTerm.term}
-                  className="w-full object-cover max-h-56"
-                />
-              </div>
-            )}
+            <div className={["p-6 flex gap-6", selectedTerm.image ? "flex-row items-start" : "flex-col"].join(" ")}>
+              {/* Text content */}
+              <div className="flex-1 min-w-0">
+                {/* Title + close */}
+                <div className="flex items-start justify-between gap-4">
+                  <h2 className="text-xl font-semibold text-gold leading-tight">
+                    {selectedTerm.term}
+                  </h2>
+                  <button
+                    onClick={() => setSelectedTerm(null)}
+                    className="mt-0.5 flex-shrink-0 rounded-lg p-1.5 text-subtle hover:bg-white/5 hover:text-fg transition-colors"
+                    aria-label="Close"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
 
-            <div className="p-6">
-              {/* Title + close */}
-              <div className="flex items-start justify-between gap-4">
-                <h2 className="text-xl font-semibold text-gold leading-tight">
-                  {selectedTerm.term}
-                </h2>
-                <button
-                  onClick={() => setSelectedTerm(null)}
-                  className="mt-0.5 flex-shrink-0 rounded-lg p-1.5 text-subtle hover:bg-white/5 hover:text-fg transition-colors"
-                  aria-label="Close"
-                >
-                  <X size={16} />
-                </button>
-              </div>
-
-              <div className="mt-5 flex flex-col gap-4">
-                {selectedTerm.formula && (
-                  <div className="rounded-lg border border-gold/20 bg-gold/5 px-3 py-2">
-                    <span className="block mb-0.5 text-xs font-semibold uppercase tracking-wider text-gold/60">
-                      Visual Formula
+                <div className="mt-5 flex flex-col gap-4">
+                  {selectedTerm.formula && (
+                    <div className="rounded-lg border border-gold/20 bg-gold/5 px-3 py-2">
+                      <span className="block mb-0.5 text-xs font-semibold uppercase tracking-wider text-gold/60">
+                        Visual Formula
+                      </span>
+                      <p className="text-sm text-gold/90 font-medium">{selectedTerm.formula}</p>
+                    </div>
+                  )}
+                  <Row label="Meaning" value={selectedTerm.meaning} />
+                  <Row label="Plain meaning" value={selectedTerm.plain} />
+                  <Row label="Use" value={selectedTerm.use} />
+                  <div>
+                    <span className="block mb-1 text-xs font-semibold uppercase tracking-wider text-muted">
+                      Example
                     </span>
-                    <p className="text-sm text-gold/90 font-medium">{selectedTerm.formula}</p>
+                    <p className="text-sm italic text-fg/70 border-l-2 border-gold/30 pl-3">
+                      {selectedTerm.example}
+                    </p>
                   </div>
-                )}
-                <Row label="Meaning" value={selectedTerm.meaning} />
-                <Row label="Plain meaning" value={selectedTerm.plain} />
-                <Row label="Use" value={selectedTerm.use} />
-                <div>
-                  <span className="block mb-1 text-xs font-semibold uppercase tracking-wider text-muted">
-                    Example
-                  </span>
-                  <p className="text-sm italic text-fg/70 border-l-2 border-gold/30 pl-3">
-                    {selectedTerm.example}
-                  </p>
                 </div>
               </div>
+
+              {/* Image — right column */}
+              {selectedTerm.image && (
+                <div className="flex-shrink-0 w-44 rounded-xl overflow-hidden border border-border">
+                  <img
+                    src={selectedTerm.image}
+                    alt={selectedTerm.term}
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+              )}
             </div>
           </div>
         </div>
