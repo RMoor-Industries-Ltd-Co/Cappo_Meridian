@@ -57,6 +57,31 @@ back an embedded app. One **shared AMG API key** (its own org/billing, separate 
 personal Claude.ai accounts) powers AI for all dashboard users; partners do not each
 need an AI account. Model: `claude-opus-4-8` (see [`src/lib/ai.ts`](src/lib/ai.ts)).
 
+## Server & Deploy Layout
+
+| Thing | Value |
+|---|---|
+| **Deploy host** | `$SSH_HOST` (GitHub Actions secret) |
+| **Deploy path** | `/opt/cappo/` |
+| **Domain** | `cappo.apex-meridian-group.com` |
+| **docker-compose** | `docker-compose.yml` (repo root) |
+
+### Container Names (compose project = `cappo`)
+
+| Service | Notes |
+|---|---|
+| `web` | Next.js app, port 3000 (internal) |
+| `db` | Postgres 17, user/db from `$POSTGRES_USER`/`$POSTGRES_DB` |
+| `caddy` | Reverse proxy, ports 80/443 |
+
+### Manual Restart
+```bash
+cd /opt/cappo && docker compose up -d
+```
+
+`DATABASE_URL` is a **full connection string secret** (GitHub Actions) — not assembled by compose.
+Token store for Google OAuth lives at `/data/google-tokens.json` (volume: `cappo_data`).
+
 ## Data placement conventions
 
 Each tool has one job. Put data where it belongs:
