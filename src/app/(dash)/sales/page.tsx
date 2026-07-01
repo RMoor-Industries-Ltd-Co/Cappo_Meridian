@@ -1,12 +1,5 @@
-import { TrendingUp } from "lucide-react";
-import { DomainModule } from "@/components/modules/DomainModule";
+import { redirect } from "next/navigation";
 
 export default function SalesPage() {
-  return (
-    <DomainModule
-      domain="Sales"
-      blurb="Pipeline and deals — ClickUp #sales + Notion records."
-      icon={<TrendingUp size={22} strokeWidth={1.75} />}
-    />
-  );
+  redirect("/campaigns");
 }
