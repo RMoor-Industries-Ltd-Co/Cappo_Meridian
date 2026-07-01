@@ -164,6 +164,7 @@ export async function gmailTrash(ids: string[]): Promise<void> {
   for (const id of ids) await gmail.users.messages.trash({ userId: "me", id });
 }
 
+
 function buildRawMime(to: string, subject: string, body: string): string {
   const lines = [
     `To: ${to}`,
@@ -186,6 +187,7 @@ export async function gmailCreateDraft(to: string, subject: string, body: string
   });
   return data.id ?? "";
 }
+
 
 /** Send an email immediately. Returns the sent message id. */
 export async function gmailSend(to: string, subject: string, body: string): Promise<string> {
