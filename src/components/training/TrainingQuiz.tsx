@@ -3,7 +3,7 @@
 import { useState, useCallback } from "react";
 import { Heart, CheckCircle } from "lucide-react";
 import { LEXICON_TERMS, CATEGORIES, type LexiconEntry } from "@/lib/lexicon-data";
-import { CappoMascot, type MascotMood } from "./CappoMascot";
+import { ValeHost } from "./ValeHost";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -50,7 +50,6 @@ export function TrainingQuiz() {
   const [answered, setAnswered] = useState(false);
   const [xp, setXp] = useState(0);
   const [xpFlash, setXpFlash] = useState(false);
-  const [mascotMood, setMascotMood] = useState<MascotMood>("neutral");
 
   // Add term state
   const [addTermInput, setAddTermInput] = useState("");
@@ -88,7 +87,6 @@ export function TrainingQuiz() {
     setXp(0);
     setSelected(null);
     setAnswered(false);
-    setMascotMood("neutral");
     setScreen("quiz");
     setReportStatus("idle");
   };
@@ -104,12 +102,10 @@ export function TrainingQuiz() {
         setScore((s) => s + 1);
         setXp((x) => x + 10);
         setXpFlash(true);
-        setMascotMood("happy");
         setTimeout(() => setXpFlash(false), 1200);
       } else {
         const newLives = lives - 1;
         setLives(newLives);
-        setMascotMood("sad");
         if (newLives === 0) {
           // out of lives — go to results after delay
           setTimeout(() => setScreen("results"), 1500);
@@ -124,12 +120,10 @@ export function TrainingQuiz() {
   const handleContinue = () => {
     if (currentIdx + 1 >= totalQuestions) {
       setScreen("results");
-      setMascotMood("celebrating");
     } else {
       setCurrentIdx((i) => i + 1);
       setSelected(null);
       setAnswered(false);
-      setMascotMood("neutral");
     }
   };
 
@@ -194,7 +188,7 @@ export function TrainingQuiz() {
               Quiz yourself on the AMG lexicon. Sharpen your brand vocabulary.
             </p>
           </div>
-          <CappoMascot mood="neutral" />
+          <ValeHost pose="quiz-welcome" className="w-28 h-40 shrink-0" priority />
         </div>
 
         {/* Founder selector */}
@@ -291,14 +285,24 @@ export function TrainingQuiz() {
   // ── Render: Results screen ───────────────────────────────────────
   if (screen === "results") {
     const pct = totalQuestions > 0 ? Math.round((score / totalQuestions) * 100) : 0;
+    const passed = lives > 0;
     return (
       <div className="flex flex-col gap-8 pt-2 max-w-2xl">
         <div className="flex items-start gap-6">
           <div className="flex-1">
-            <h1 className="text-3xl font-bold text-gold">Session Complete</h1>
-            <p className="mt-2 text-sm text-subtle">Here&apos;s how you did, {founder}.</p>
+            <h1 className="text-3xl font-bold text-gold">
+              {passed ? "Vale Congratulates You" : "Session Complete"}
+            </h1>
+            <p className="mt-2 text-sm text-subtle">
+              {passed
+                ? `Well done, ${founder} — you've passed the Lexicon Training.`
+                : `Here's how you did, ${founder}.`}
+            </p>
           </div>
-          <CappoMascot mood="celebrating" />
+          <ValeHost
+            pose="quiz-welcome"
+            className={passed ? "w-40 h-56 shrink-0" : "w-28 h-40 shrink-0"}
+          />
         </div>
 
         <div className="rounded-2xl border border-border bg-panel p-6 flex flex-col gap-4">
@@ -316,6 +320,11 @@ export function TrainingQuiz() {
         </div>
 
         <div className="flex flex-col gap-3">
+          {passed && (
+            <p className="text-xs text-subtle">
+              Next step: email your results to complete the record.
+            </p>
+          )}
           {/* Send score report */}
           <button
             onClick={sendReport}
@@ -355,7 +364,7 @@ export function TrainingQuiz() {
   if (!currentQuestion) return null;
 
   return (
-    <div className="flex flex-col gap-6 pt-2 max-w-2xl">
+    <div className="flex flex-col gap-6 pt-2 max-w-6xl">
       {/* Progress bar + lives */}
       <div className="flex items-center gap-4">
         <div className="flex-1 h-2 rounded-full bg-border">
@@ -378,15 +387,15 @@ export function TrainingQuiz() {
         </span>
       </div>
 
-      {/* Quiz card + mascot */}
-      <div className="flex flex-col md:flex-row gap-6 items-start">
-        {/* Mascot — mobile: above card */}
-        <div className="md:hidden self-center">
-          <CappoMascot mood={mascotMood} />
+      {/* Quiz card + Vale, persistent for the duration of the quiz */}
+      <div className="flex flex-col lg:flex-row gap-6 items-start">
+        {/* Vale — mobile: small, above card */}
+        <div className="lg:hidden self-center">
+          <ValeHost pose="stance" className="w-24 h-36" />
         </div>
 
         {/* Card */}
-        <div className="flex-1 rounded-2xl border border-border bg-panel p-6 flex flex-col gap-5">
+        <div className="flex-1 max-w-2xl rounded-2xl border border-border bg-panel p-6 flex flex-col gap-5">
           {/* Prompt */}
           <div>
             <p className="text-xs font-semibold uppercase tracking-wider text-muted mb-3">
@@ -446,9 +455,9 @@ export function TrainingQuiz() {
           )}
         </div>
 
-        {/* Mascot — desktop: right of card */}
-        <div className="hidden md:block">
-          <CappoMascot mood={mascotMood} />
+        {/* Vale — desktop: large, right-justified, persistent for the quiz */}
+        <div className="hidden lg:block sticky top-6 w-[320px] xl:w-[400px] h-[70vh] shrink-0">
+          <ValeHost pose="stance" className="w-full h-full" priority />
         </div>
       </div>
     </div>
