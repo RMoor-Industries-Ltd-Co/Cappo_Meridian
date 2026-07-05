@@ -179,103 +179,114 @@ export function TrainingQuiz() {
   // ── Render: Start screen ─────────────────────────────────────────
   if (screen === "start") {
     return (
-      <div className="flex flex-col gap-8 pt-2 max-w-2xl">
-        {/* Header + mascot */}
-        <div className="flex items-start gap-6">
-          <div className="flex-1">
-            <h1 className="text-3xl font-bold text-gold">Training</h1>
-            <p className="mt-2 text-sm text-subtle">
-              Quiz yourself on the AMG lexicon. Sharpen your brand vocabulary.
-            </p>
+      <div className="flex flex-col gap-8 pt-2 max-w-6xl">
+        <div className="flex flex-col lg:flex-row gap-8 items-start">
+          {/* Vale — mobile: small, above content */}
+          <div className="lg:hidden self-center">
+            <ValeHost pose="quiz-welcome" className="w-28 h-40" priority />
           </div>
-          <ValeHost pose="quiz-welcome" className="w-28 h-40 shrink-0" priority />
-        </div>
 
-        {/* Founder selector */}
-        <div>
-          <h2 className="text-xs font-semibold uppercase tracking-wider text-muted mb-3">Who&apos;s training?</h2>
-          <div className="flex gap-3">
-            {(["Founder 55", "Founder 88"] as const).map((f) => (
-              <button
-                key={f}
-                onClick={() => setFounder(f)}
-                className={[
-                  "flex-1 rounded-xl border px-4 py-3 text-sm font-medium transition-all",
-                  founder === f
-                    ? "border-gold bg-gold/10 text-gold"
-                    : "border-border bg-panel text-subtle hover:border-gold/40 hover:text-fg",
-                ].join(" ")}
-              >
-                {f}
-              </button>
-            ))}
-          </div>
-        </div>
+          {/* Left content column */}
+          <div className="flex-1 max-w-2xl flex flex-col gap-8">
+            <div>
+              <h1 className="text-3xl font-bold text-gold">Training</h1>
+              <p className="mt-2 text-sm text-subtle">
+                Quiz yourself on the AMG lexicon. Sharpen your brand vocabulary.
+              </p>
+            </div>
 
-        {/* Category selector */}
-        <div>
-          <h2 className="text-xs font-semibold uppercase tracking-wider text-muted mb-3">Categories</h2>
-          <div className="flex flex-wrap gap-2">
-            {CATEGORIES.map((cat) => {
-              const active = selectedCategories.has(cat);
-              return (
-                <button
-                  key={cat}
-                  onClick={() => toggleCategory(cat)}
-                  className={[
-                    "flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs font-medium transition-all",
-                    active
-                      ? "border-gold/60 bg-gold/10 text-gold"
-                      : "border-border bg-panel text-subtle hover:border-gold/30 hover:text-fg",
-                  ].join(" ")}
-                >
-                  {active && <CheckCircle size={12} className="text-gold" />}
-                  {cat}
-                </button>
-              );
-            })}
-          </div>
-          <p className="mt-2 text-xs text-muted">
-            {LEXICON_TERMS.filter((t) => selectedCategories.has(t.category)).length} terms selected
-          </p>
-        </div>
+            {/* Founder selector */}
+            <div>
+              <h2 className="text-xs font-semibold uppercase tracking-wider text-muted mb-3">Who&apos;s training?</h2>
+              <div className="flex gap-3">
+                {(["Founder 55", "Founder 88"] as const).map((f) => (
+                  <button
+                    key={f}
+                    onClick={() => setFounder(f)}
+                    className={[
+                      "flex-1 rounded-xl border px-4 py-3 text-sm font-medium transition-all",
+                      founder === f
+                        ? "border-gold bg-gold/10 text-gold"
+                        : "border-border bg-panel text-subtle hover:border-gold/40 hover:text-fg",
+                    ].join(" ")}
+                  >
+                    {f}
+                  </button>
+                ))}
+              </div>
+            </div>
 
-        {/* Begin button */}
-        <button
-          onClick={beginSession}
-          disabled={LEXICON_TERMS.filter((t) => selectedCategories.has(t.category)).length < 2}
-          className="w-full rounded-xl border border-gold/60 bg-gold/10 py-3 text-sm font-semibold text-gold hover:bg-gold/20 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-        >
-          Begin Session
-        </button>
+            {/* Category selector */}
+            <div>
+              <h2 className="text-xs font-semibold uppercase tracking-wider text-muted mb-3">Categories</h2>
+              <div className="flex flex-wrap gap-2">
+                {CATEGORIES.map((cat) => {
+                  const active = selectedCategories.has(cat);
+                  return (
+                    <button
+                      key={cat}
+                      onClick={() => toggleCategory(cat)}
+                      className={[
+                        "flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs font-medium transition-all",
+                        active
+                          ? "border-gold/60 bg-gold/10 text-gold"
+                          : "border-border bg-panel text-subtle hover:border-gold/30 hover:text-fg",
+                      ].join(" ")}
+                    >
+                      {active && <CheckCircle size={12} className="text-gold" />}
+                      {cat}
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="mt-2 text-xs text-muted">
+                {LEXICON_TERMS.filter((t) => selectedCategories.has(t.category)).length} terms selected
+              </p>
+            </div>
 
-        {/* Add a term panel */}
-        <div className="rounded-2xl border border-border bg-panel p-5">
-          <h2 className="text-sm font-semibold text-fg mb-1">Add a Term</h2>
-          <p className="text-xs text-subtle mb-3">
-            Describe a new AMG term in plain language and we&apos;ll extract and add it to the Notion lexicon.
-          </p>
-          <textarea
-            value={addTermInput}
-            onChange={(e) => setAddTermInput(e.target.value)}
-            placeholder="Describe a new AMG term..."
-            rows={3}
-            className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm text-fg placeholder:text-muted resize-none focus:outline-none focus:border-gold/40 transition-colors"
-          />
-          <div className="mt-2 flex items-center gap-3">
+            {/* Begin button */}
             <button
-              onClick={submitAddTerm}
-              disabled={addTermStatus === "loading" || !addTermInput.trim()}
-              className="rounded-lg border border-gold/40 bg-gold/10 px-4 py-2 text-xs font-semibold text-gold hover:bg-gold/20 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+              onClick={beginSession}
+              disabled={LEXICON_TERMS.filter((t) => selectedCategories.has(t.category)).length < 2}
+              className="w-full rounded-xl border border-gold/60 bg-gold/10 py-3 text-sm font-semibold text-gold hover:bg-gold/20 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
             >
-              {addTermStatus === "loading" ? "Submitting…" : "Submit"}
+              Begin Session
             </button>
-            {addTermStatus === "success" && (
-              <p className="text-xs text-gold">{addTermMessage}</p>
-            )}
-            {addTermStatus === "error" && (
-              <p className="text-xs text-red-400">{addTermMessage}</p>
-            )}
+
+            {/* Add a term panel */}
+            <div className="rounded-2xl border border-border bg-panel p-5">
+              <h2 className="text-sm font-semibold text-fg mb-1">Add a Term</h2>
+              <p className="text-xs text-subtle mb-3">
+                Describe a new AMG term in plain language and we&apos;ll extract and add it to the Notion lexicon.
+              </p>
+              <textarea
+                value={addTermInput}
+                onChange={(e) => setAddTermInput(e.target.value)}
+                placeholder="Describe a new AMG term..."
+                rows={3}
+                className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm text-fg placeholder:text-muted resize-none focus:outline-none focus:border-gold/40 transition-colors"
+              />
+              <div className="mt-2 flex items-center gap-3">
+                <button
+                  onClick={submitAddTerm}
+                  disabled={addTermStatus === "loading" || !addTermInput.trim()}
+                  className="rounded-lg border border-gold/40 bg-gold/10 px-4 py-2 text-xs font-semibold text-gold hover:bg-gold/20 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  {addTermStatus === "loading" ? "Submitting…" : "Submit"}
+                </button>
+                {addTermStatus === "success" && (
+                  <p className="text-xs text-gold">{addTermMessage}</p>
+                )}
+                {addTermStatus === "error" && (
+                  <p className="text-xs text-red-400">{addTermMessage}</p>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Vale — desktop: large, right-justified */}
+          <div className="hidden lg:block sticky top-6 w-[320px] xl:w-[420px] h-[75vh] shrink-0">
+            <ValeHost pose="quiz-welcome" className="w-full h-full" priority />
           </div>
         </div>
       </div>
@@ -287,73 +298,87 @@ export function TrainingQuiz() {
     const pct = totalQuestions > 0 ? Math.round((score / totalQuestions) * 100) : 0;
     const passed = lives > 0;
     return (
-      <div className="flex flex-col gap-8 pt-2 max-w-2xl">
-        <div className="flex items-start gap-6">
-          <div className="flex-1">
-            <h1 className="text-3xl font-bold text-gold">
-              {passed ? "Vale Congratulates You" : "Session Complete"}
-            </h1>
-            <p className="mt-2 text-sm text-subtle">
-              {passed
-                ? `Well done, ${founder} — you've passed the Lexicon Training.`
-                : `Here's how you did, ${founder}.`}
-            </p>
+      <div className="flex flex-col gap-8 pt-2 max-w-6xl">
+        <div className="flex flex-col lg:flex-row gap-8 items-start">
+          {/* Vale — mobile: small, above content */}
+          <div className="lg:hidden self-center">
+            <ValeHost pose="quiz-welcome" className="w-28 h-40" />
           </div>
-          <ValeHost
-            pose="quiz-welcome"
-            className={passed ? "w-40 h-56 shrink-0" : "w-28 h-40 shrink-0"}
-          />
-        </div>
 
-        <div className="rounded-2xl border border-border bg-panel p-6 flex flex-col gap-4">
-          <div className="flex items-baseline gap-3">
-            <span className="text-5xl font-bold text-gold">{score}/{totalQuestions}</span>
-            <span className="text-xl text-subtle">{pct}%</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-subtle">XP Earned:</span>
-            <span className="text-sm font-semibold text-gold">+{xp} XP</span>
-          </div>
-          {lives === 0 && (
-            <p className="text-sm text-red-400">Session ended early — all hearts lost.</p>
-          )}
-        </div>
+          {/* Left content column */}
+          <div className="flex-1 max-w-2xl flex flex-col gap-8">
+            <div>
+              <h1 className="text-3xl font-bold text-gold">
+                {passed ? "Vale Congratulates You" : "Session Complete"}
+              </h1>
+              <p className="mt-2 text-sm text-subtle">
+                {passed
+                  ? `Well done, ${founder} — you've passed the Lexicon Training.`
+                  : `Here's how you did, ${founder}.`}
+              </p>
+            </div>
 
-        <div className="flex flex-col gap-3">
-          {passed && (
-            <p className="text-xs text-subtle">
-              Next step: email your results to complete the record.
-            </p>
-          )}
-          {/* Send score report */}
-          <button
-            onClick={sendReport}
-            disabled={reportStatus === "loading" || reportStatus === "sent"}
-            className="w-full rounded-xl border border-gold/40 bg-gold/10 py-3 text-sm font-semibold text-gold hover:bg-gold/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            <div className="rounded-2xl border border-border bg-panel p-6 flex flex-col gap-4">
+              <div className="flex items-baseline gap-3">
+                <span className="text-5xl font-bold text-gold">{score}/{totalQuestions}</span>
+                <span className="text-xl text-subtle">{pct}%</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-subtle">XP Earned:</span>
+                <span className="text-sm font-semibold text-gold">+{xp} XP</span>
+              </div>
+              {lives === 0 && (
+                <p className="text-sm text-red-400">Session ended early — all hearts lost.</p>
+              )}
+            </div>
+
+            <div className="flex flex-col gap-3">
+              {passed && (
+                <p className="text-xs text-subtle">
+                  Next step: email your results to complete the record.
+                </p>
+              )}
+              {/* Send score report */}
+              <button
+                onClick={sendReport}
+                disabled={reportStatus === "loading" || reportStatus === "sent"}
+                className="w-full rounded-xl border border-gold/40 bg-gold/10 py-3 text-sm font-semibold text-gold hover:bg-gold/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {reportStatus === "loading"
+                  ? "Sending…"
+                  : reportStatus === "sent"
+                  ? "Report Sent"
+                  : "Send Score Report"}
+              </button>
+              {reportStatus === "error" && (
+                <p className="text-xs text-red-400 text-center">Failed to send report. Try again.</p>
+              )}
+
+              <div className="flex gap-3">
+                <button
+                  onClick={beginSession}
+                  className="flex-1 rounded-xl border border-border bg-panel py-3 text-sm font-medium text-fg hover:border-gold/40 hover:bg-panel-2 transition-all"
+                >
+                  Try Again
+                </button>
+                <button
+                  onClick={() => setScreen("start")}
+                  className="flex-1 rounded-xl border border-border bg-panel py-3 text-sm font-medium text-subtle hover:border-gold/40 hover:text-fg hover:bg-panel-2 transition-all"
+                >
+                  Back to Start
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Vale — desktop: large, right-justified; bigger still on a pass */}
+          <div
+            className={[
+              "hidden lg:block sticky top-6 shrink-0",
+              passed ? "w-[360px] xl:w-[460px] h-[80vh]" : "w-[320px] xl:w-[420px] h-[70vh]",
+            ].join(" ")}
           >
-            {reportStatus === "loading"
-              ? "Sending…"
-              : reportStatus === "sent"
-              ? "Report Sent"
-              : "Send Score Report"}
-          </button>
-          {reportStatus === "error" && (
-            <p className="text-xs text-red-400 text-center">Failed to send report. Try again.</p>
-          )}
-
-          <div className="flex gap-3">
-            <button
-              onClick={beginSession}
-              className="flex-1 rounded-xl border border-border bg-panel py-3 text-sm font-medium text-fg hover:border-gold/40 hover:bg-panel-2 transition-all"
-            >
-              Try Again
-            </button>
-            <button
-              onClick={() => setScreen("start")}
-              className="flex-1 rounded-xl border border-border bg-panel py-3 text-sm font-medium text-subtle hover:border-gold/40 hover:text-fg hover:bg-panel-2 transition-all"
-            >
-              Back to Start
-            </button>
+            <ValeHost pose="quiz-welcome" className="w-full h-full" />
           </div>
         </div>
       </div>
