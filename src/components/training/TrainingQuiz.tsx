@@ -58,6 +58,7 @@ export function TrainingQuiz() {
 
   // Score report state
   const [reportStatus, setReportStatus] = useState<"idle" | "loading" | "sent" | "error">("idle");
+  const [reportError, setReportError] = useState("");
 
   const currentQuestion = questions[currentIdx];
   const totalQuestions = questions.length;
@@ -130,6 +131,7 @@ export function TrainingQuiz() {
   // ── Send score report ────────────────────────────────────────────
   const sendReport = async () => {
     setReportStatus("loading");
+    setReportError("");
     try {
       const res = await fetch("/api/training/score", {
         method: "POST",
@@ -144,9 +146,15 @@ export function TrainingQuiz() {
         }),
       });
       const json = await res.json();
-      setReportStatus(json.ok ? "sent" : "error");
-    } catch {
+      if (json.ok) {
+        setReportStatus("sent");
+      } else {
+        setReportStatus("error");
+        setReportError(json.error ?? "Unknown error.");
+      }
+    } catch (err) {
       setReportStatus("error");
+      setReportError(err instanceof Error ? err.message : "Network error.");
     }
   };
 
@@ -351,7 +359,10 @@ export function TrainingQuiz() {
                   : "Send Score Report"}
               </button>
               {reportStatus === "error" && (
-                <p className="text-xs text-red-400 text-center">Failed to send report. Try again.</p>
+                <p className="text-xs text-red-400 text-center">
+                  Failed to send report{reportError ? `: ${reportError}` : ""}. Try again, or check
+                  Settings → Integrations for the Gmail connection.
+                </p>
               )}
 
               <div className="flex gap-3">
