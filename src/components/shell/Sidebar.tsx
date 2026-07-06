@@ -8,6 +8,7 @@ import { Settings, LogOut } from "lucide-react";
 import { NAV_ITEMS } from "@/lib/nav";
 import { AmgMark } from "@/components/brand/AmgLogo";
 import { signOutAction } from "@/lib/actions/auth";
+import { MeetingHighlight } from "@/components/shell/MeetingHighlight";
 
 interface SidebarUser {
   name?: string | null;
@@ -32,24 +33,29 @@ export function Sidebar({ user }: { user?: SidebarUser | null }) {
             item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
           const Icon = item.icon;
           return (
-            <Link
-              key={item.href}
-              href={item.href}
-              title={item.label}
-              className={`group relative flex h-10 w-10 items-center justify-center rounded-xl transition-colors ${
-                active
-                  ? "bg-gold/15 text-gold"
-                  : "text-subtle hover:bg-white/5 hover:text-muted"
-              }`}
-            >
-              {active && (
-                <span className="absolute left-[-12px] h-5 w-1 rounded-full bg-gold shadow-[0_0_10px_var(--gold-glow)]" />
+            <div key={item.href} className="group relative">
+              <Link
+                href={item.href}
+                title={item.label}
+                className={`flex h-10 w-10 items-center justify-center rounded-xl transition-colors ${
+                  active
+                    ? "bg-gold/15 text-gold"
+                    : "text-subtle hover:bg-white/5 hover:text-muted"
+                }`}
+              >
+                {active && (
+                  <span className="absolute left-[-12px] h-5 w-1 rounded-full bg-gold shadow-[0_0_10px_var(--gold-glow)]" />
+                )}
+                <Icon size={19} strokeWidth={1.75} />
+              </Link>
+              {item.highlight ? (
+                <MeetingHighlight pathname={pathname} />
+              ) : (
+                <span className="pointer-events-none absolute left-12 top-0 z-50 hidden whitespace-nowrap rounded-md border border-border bg-panel px-2 py-1 text-xs text-muted group-hover:block">
+                  {item.label}
+                </span>
               )}
-              <Icon size={19} strokeWidth={1.75} />
-              <span className="pointer-events-none absolute left-12 z-50 hidden whitespace-nowrap rounded-md border border-border bg-panel px-2 py-1 text-xs text-muted group-hover:block">
-                {item.label}
-              </span>
-            </Link>
+            </div>
           );
         })}
       </nav>

@@ -12,6 +12,7 @@ import {
   Mail,
   HardDrive,
   BookOpen,
+  Video,
   type LucideIcon,
 } from "lucide-react";
 
@@ -21,11 +22,14 @@ export interface NavItem {
   icon: LucideIcon;
   /** Short blurb shown on each section's placeholder page. */
   blurb: string;
+  /** Gets the hover priority-highlight flyout (see components/shell/MeetingHighlight.tsx). */
+  highlight?: boolean;
 }
 
 /** The ten business-operation functions, in rail order. */
 export const NAV_ITEMS: NavItem[] = [
   { href: "/", label: "Overview", icon: LayoutDashboard, blurb: "Company-wide pulse from the AMG ClickUp space, by quarter." },
+  { href: "/meetings", label: "Meetings", icon: Video, blurb: "Transcribed & logged conversations — Fathom, Gemini, Calendly, ClickUp, and Notion, in one index.", highlight: true },
   { href: "/calendar", label: "Calendar", icon: CalendarDays, blurb: "Schedule across the team — month, week, and day." },
   { href: "/campaigns", label: "Campaigns", icon: Flag, blurb: "Marketing and Sales — campaigns, pipeline, content, and revenue." },
   { href: "/ai", label: "AI", icon: Sparkles, blurb: "AI research workspace — switch between Claude and GPT." },
