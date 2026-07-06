@@ -57,6 +57,28 @@ back an embedded app. One **shared AMG API key** (its own org/billing, separate 
 personal Claude.ai accounts) powers AI for all dashboard users; partners do not each
 need an AI account. Model: `claude-opus-4-8` (see [`src/lib/ai.ts`](src/lib/ai.ts)).
 
+## Multi-partner access
+
+- **Every logged-in partner gets an identical interface.** The dashboard has no
+  per-user personalization or role-based UI branching — whoever authenticates
+  (any account on `GOOGLE_WORKSPACE_DOMAIN`, or a `PARTNER_EMAILS` addition)
+  sees the same modules, the same data, the same layout as anyone else. Don't
+  introduce per-user customization without discussing it first — it breaks
+  this expectation.
+- **Gmail/Drive is one shared connection, not per-user.** `getAuthorizedClient()`
+  (`lib/connectors/google.ts`) stores a single token row (`TOKEN_ID = "shared"`)
+  — whichever partner completes the OAuth flow in Settings → Integrations
+  connects Gmail/Drive for the whole team, independent of who's currently
+  logged into the dashboard.
+- **Following a Gmail link requires the matching Google session in the
+  browser.** Links that open Gmail directly (e.g. a message permalink) only
+  resolve if the browser is currently logged into the same Google account the
+  link points at. If a partner's browser is signed into a personal Gmail
+  account instead of the connected workspace account, the link lands in the
+  wrong inbox or fails — expected Google behavior, not a bug. Sign into the
+  correct Google account in that browser (or use a separate profile/incognito
+  window) before following such links.
+
 ## Data placement conventions
 
 Each tool has one job. Put data where it belongs:
@@ -69,3 +91,23 @@ Each tool has one job. Put data where it belongs:
   embed is clearly more operationally useful.
 - **ClickUp** = project management: tasks, statuses, swim lanes — the "what are we
   working on right now" layer.
+
+## Lexicon sync (Notion → Cappo)
+
+The HVN Lexicon Notion page is the source of truth for terms. `lib/lexiconSync.ts`
+pulls it via `lib/connectors/lexicon.ts` and upserts into the Postgres `lexicon_terms`
+table (keyed by Notion block id); the Lexicon page and Training quiz read from that
+table (falling back to the static list in `lib/lexicon-data.ts` if the DB is empty or
+unconfigured, e.g. local dev).
+
+- **Daily automatic sync**: `lib/lexiconScheduler.ts`, started once per server
+  instance from `instrumentation.ts`. This is a single-container deploy with no
+  separate worker — it's an in-process check every hour that only actually syncs
+  once ≥24h have passed since the last run (tracked in `lexicon_sync_runs`), so it
+  survives restarts without duplicating work or needing a cron container.
+- **Manual/on-demand sync**: `POST /api/lexicon/sync` with header `x-agent-key:
+  $AGENT_API_KEY` (same auth pattern as `/api/agent`) — useful right after adding
+  terms in Notion instead of waiting for the next scheduled pass.
+- The "Add a Term" panel on the Training start screen already writes new
+  submissions *to* Notion (`/api/training/suggest`) — combined with this sync, a
+  submitted term round-trips into the Lexicon view/quiz on the next daily pass.

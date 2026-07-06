@@ -70,6 +70,26 @@ async function ensureSchema(p: Pool): Promise<void> {
           data         TEXT NOT NULL,
           updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
         );
+
+        CREATE TABLE IF NOT EXISTS lexicon_terms (
+          id            TEXT PRIMARY KEY,
+          name          TEXT NOT NULL,
+          category      TEXT NOT NULL,
+          meaning       TEXT,
+          use_case      TEXT,
+          plain_meaning TEXT,
+          example       TEXT,
+          created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+          updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+        );
+        CREATE TABLE IF NOT EXISTS lexicon_sync_runs (
+          id            BIGSERIAL PRIMARY KEY,
+          ran_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+          added_count   INT NOT NULL DEFAULT 0,
+          updated_count INT NOT NULL DEFAULT 0,
+          total_count   INT NOT NULL DEFAULT 0,
+          error         TEXT
+        );
       `)
       .then(() => undefined)
       .catch((e) => {
@@ -327,4 +347,83 @@ export async function loadGoogleToken(id: string): Promise<string | null> {
     [id],
   );
   return rows[0]?.data ?? null;
+}
+
+// ── Lexicon (Notion-synced) ──────────────────────────────────────────
+export interface StoredLexiconTerm {
+  id: string;
+  name: string;
+  category: string;
+  meaning: string | null;
+  use_case: string | null;
+  plain_meaning: string | null;
+  example: string | null;
+}
+
+export async function listLexiconTerms(): Promise<StoredLexiconTerm[]> {
+  const p = await db();
+  if (!p) return [];
+  const { rows } = await p.query<StoredLexiconTerm>(
+    `SELECT id, name, category, meaning, use_case, plain_meaning, example
+       FROM lexicon_terms ORDER BY name ASC`,
+  );
+  return rows;
+}
+
+interface UpsertLexiconTermInput {
+  id: string;
+  name: string;
+  category: string;
+  meaning: string;
+  use: string;
+  plainMeaning: string;
+  example: string;
+}
+
+/** Upsert each term by its Notion block id. Returns how many were newly inserted vs updated. */
+export async function upsertLexiconTerms(
+  terms: UpsertLexiconTermInput[],
+): Promise<{ added: number; updated: number }> {
+  const p = await db();
+  if (!p) throw new Error("Database not configured");
+  let added = 0;
+  let updated = 0;
+  for (const t of terms) {
+    const { rows } = await p.query<{ inserted: boolean }>(
+      `INSERT INTO lexicon_terms (id, name, category, meaning, use_case, plain_meaning, example, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, now())
+       ON CONFLICT (id) DO UPDATE SET
+         name = EXCLUDED.name, category = EXCLUDED.category, meaning = EXCLUDED.meaning,
+         use_case = EXCLUDED.use_case, plain_meaning = EXCLUDED.plain_meaning, example = EXCLUDED.example,
+         updated_at = now()
+       RETURNING (xmax = 0) AS inserted`,
+      [t.id, t.name, t.category, t.meaning, t.use, t.plainMeaning, t.example],
+    );
+    if (rows[0]?.inserted) added += 1;
+    else updated += 1;
+  }
+  return { added, updated };
+}
+
+export async function logLexiconSync(result: {
+  added: number;
+  updated: number;
+  total: number;
+  error?: string;
+}): Promise<void> {
+  const p = await db();
+  if (!p) return;
+  await p.query(
+    `INSERT INTO lexicon_sync_runs (added_count, updated_count, total_count, error) VALUES ($1, $2, $3, $4)`,
+    [result.added, result.updated, result.total, result.error ?? null],
+  );
+}
+
+export async function getLastLexiconSync(): Promise<{ ran_at: string; error: string | null } | null> {
+  const p = await db();
+  if (!p) return null;
+  const { rows } = await p.query<{ ran_at: string; error: string | null }>(
+    `SELECT ran_at::text, error FROM lexicon_sync_runs ORDER BY id DESC LIMIT 1`,
+  );
+  return rows[0] ?? null;
 }

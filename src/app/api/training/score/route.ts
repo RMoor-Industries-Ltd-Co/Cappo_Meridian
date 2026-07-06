@@ -34,6 +34,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true });
   } catch (err) {
     const error = err instanceof Error ? err.message : String(err);
+    console.error("[training/score] failed to send report:", error);
     return NextResponse.json({ ok: false, error });
   }
 }
