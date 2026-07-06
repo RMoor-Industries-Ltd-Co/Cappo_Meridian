@@ -96,21 +96,36 @@ export interface MeetingNote {
   url: string;
 }
 
+const meetingRow = (r: NRow): MeetingNote => ({
+  id: r.id,
+  title: titleOf(r, "Title") || "Untitled",
+  date: dateOf(r, "Date"),
+  source: selOf(r, "Source"),
+  link: urlOf(r, "Source Link"),
+  summary: textOf(r, "Summary"),
+  url: r.url ?? "",
+});
+
 /** Recent meeting notes — the single index across Fathom / Gemini / ClickUp / Notion. */
 export async function getMeetingNotes(limit = 8): Promise<MeetingNote[]> {
   const rows = await query(NOTION_DS.meetings, {
     page_size: limit,
     sorts: [{ property: "Date", direction: "descending" }],
   });
-  return rows.map((r) => ({
-    id: r.id,
-    title: titleOf(r, "Title") || "Untitled",
-    date: dateOf(r, "Date"),
-    source: selOf(r, "Source"),
-    link: urlOf(r, "Source Link"),
-    summary: textOf(r, "Summary"),
-    url: r.url ?? "",
-  }));
+  return rows.map(meetingRow);
+}
+
+/** Most recent meeting notes tagged with a given Domain (see getDomainBundle). */
+export async function getMeetingNotesByDomain(domainName: string, limit = 5): Promise<MeetingNote[]> {
+  const dom = await query(NOTION_DS.domains, { page_size: 100 });
+  const d = dom.find((r) => titleOf(r, "Name").toLowerCase() === domainName.toLowerCase());
+  if (!d) return [];
+  const rows = await query(NOTION_DS.meetings, {
+    page_size: limit,
+    sorts: [{ property: "Date", direction: "descending" }],
+    filter: { property: "Domain", relation: { contains: d.id } },
+  });
+  return rows.map(meetingRow);
 }
 
 export interface WikiItem {
