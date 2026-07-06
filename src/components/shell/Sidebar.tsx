@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { Settings, LogOut } from "lucide-react";
 import { NAV_ITEMS } from "@/lib/nav";
@@ -20,6 +20,35 @@ export function Sidebar({ user }: { user?: SidebarUser | null }) {
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
   const [imgError, setImgError] = useState(false);
+  const [isTouch, setIsTouch] = useState(() =>
+    typeof window !== "undefined"
+      ? window.matchMedia("(hover: none) and (pointer: coarse)").matches
+      : false,
+  );
+  const [openHighlight, setOpenHighlight] = useState<string | null>(null);
+  const navRef = useRef<HTMLElement | null>(null);
+  const [prevPathname, setPrevPathname] = useState(pathname);
+
+  if (prevPathname !== pathname) {
+    setPrevPathname(pathname);
+    if (openHighlight !== null) setOpenHighlight(null);
+  }
+
+  useEffect(() => {
+    const mq = window.matchMedia("(hover: none) and (pointer: coarse)");
+    const onChange = (e: MediaQueryListEvent) => setIsTouch(e.matches);
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, []);
+
+  useEffect(() => {
+    if (!openHighlight) return;
+    const closeIfOutside = (e: MouseEvent) => {
+      if (!navRef.current?.contains(e.target as Node)) setOpenHighlight(null);
+    };
+    document.addEventListener("click", closeIfOutside);
+    return () => document.removeEventListener("click", closeIfOutside);
+  }, [openHighlight]);
 
   return (
     <aside className="flex w-16 shrink-0 flex-col items-center gap-1 border-r border-border bg-[var(--bg-elevated)]/60 py-4">
@@ -27,16 +56,23 @@ export function Sidebar({ user }: { user?: SidebarUser | null }) {
         <AmgMark size={30} />
       </Link>
 
-      <nav className="flex flex-1 flex-col items-center gap-1">
+      <nav ref={navRef} className="flex flex-1 flex-col items-center gap-1">
         {NAV_ITEMS.map((item) => {
           const active =
             item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
           const Icon = item.icon;
+          const flyoutOpen = item.highlight && openHighlight === item.href;
           return (
             <div key={item.href} className="group relative">
               <Link
                 href={item.href}
                 title={item.label}
+                onClick={(e) => {
+                  if (item.highlight && isTouch && !flyoutOpen) {
+                    e.preventDefault();
+                    setOpenHighlight(item.href);
+                  }
+                }}
                 className={`flex h-10 w-10 items-center justify-center rounded-xl transition-colors ${
                   active
                     ? "bg-gold/15 text-gold"
@@ -49,7 +85,7 @@ export function Sidebar({ user }: { user?: SidebarUser | null }) {
                 <Icon size={19} strokeWidth={1.75} />
               </Link>
               {item.highlight ? (
-                <MeetingHighlight pathname={pathname} />
+                <MeetingHighlight pathname={pathname} open={flyoutOpen} />
               ) : (
                 <span className="pointer-events-none absolute left-12 top-0 z-50 hidden whitespace-nowrap rounded-md border border-border bg-panel px-2 py-1 text-xs text-muted group-hover:block">
                   {item.label}
