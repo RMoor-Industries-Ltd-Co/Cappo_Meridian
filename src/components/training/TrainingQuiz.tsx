@@ -2,7 +2,7 @@
 
 import { useState, useCallback } from "react";
 import { Heart, CheckCircle } from "lucide-react";
-import { LEXICON_TERMS, CATEGORIES, type LexiconEntry } from "@/lib/lexicon-data";
+import type { LexiconEntry } from "@/lib/lexicon-data";
 import { ValeHost } from "./ValeHost";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -35,7 +35,12 @@ function generateQuestions(terms: LexiconEntry[], count = 10): Question[] {
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
-export function TrainingQuiz() {
+interface TrainingQuizProps {
+  terms: LexiconEntry[];
+  categories: string[];
+}
+
+export function TrainingQuiz({ terms: LEXICON_TERMS, categories: CATEGORIES }: TrainingQuizProps) {
   // Start screen state
   const [selectedCategories, setSelectedCategories] = useState<Set<string>>(new Set(CATEGORIES));
   const [founder, setFounder] = useState<"Founder 55" | "Founder 88">("Founder 55");
