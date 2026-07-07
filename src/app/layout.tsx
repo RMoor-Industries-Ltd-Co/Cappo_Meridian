@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
@@ -15,6 +15,14 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Cappo Meridian",
   description: "Project management hub for Apex Meridian Group — ClickUp, Notion, Drive & Gmail.",
+};
+
+// viewportFit: "cover" lets the app draw under Android's gesture-nav bar and
+// any display cutout — panels then pad themselves with env(safe-area-inset-*).
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
 };
 
 export default function RootLayout({

@@ -39,7 +39,8 @@ export function MeetingsClient({ meetings, configured }: { meetings: MeetingNote
 
       {!configured && (
         <div className="rounded-xl border border-border bg-panel px-4 py-3 text-sm text-subtle">
-          Notion isn&apos;t connected — meeting notes can&apos;t be read yet. See Settings → Integrations.
+          No meeting source is connected yet — connect ClickUp or Notion in Settings → Integrations
+          to pull transcribed meetings in.
         </div>
       )}
 
@@ -69,7 +70,8 @@ export function MeetingsClient({ meetings, configured }: { meetings: MeetingNote
 
           {filtered.length === 0 ? (
             <div className="rounded-xl border border-border bg-panel px-4 py-8 text-center text-sm text-subtle">
-              No meeting notes yet. Add a row to the Meeting Notes database (Source + link + summary) and it shows here.
+              No meetings yet. ClickUp meeting docs appear here automatically; Notion rows show once
+              added to the Meeting Notes database (Source + link + summary).
             </div>
           ) : (
             <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
