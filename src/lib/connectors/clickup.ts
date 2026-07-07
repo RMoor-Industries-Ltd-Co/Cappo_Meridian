@@ -3,6 +3,7 @@ import type { ConnectorStatus, UnifiedItem } from "@/lib/types";
 import { type Connector, notConfigured } from "./connector";
 
 const API = "https://api.clickup.com/api/v2";
+const API_V3 = "https://api.clickup.com/api/v3";
 
 async function clickup<T>(path: string, init?: RequestInit): Promise<T> {
   const token = env.CLICKUP_API_TOKEN;
@@ -13,6 +14,21 @@ async function clickup<T>(path: string, init?: RequestInit): Promise<T> {
     // ClickUp data changes often; never serve stale.
     cache: "no-store",
     ...init,
+  });
+  if (!res.ok) {
+    throw new Error(`ClickUp ${path} → ${res.status} ${res.statusText}`);
+  }
+  return res.json() as Promise<T>;
+}
+
+/** ClickUp Docs live on the v3 API (Docs aren't exposed on v2). */
+async function clickupV3<T>(path: string): Promise<T> {
+  const token = env.CLICKUP_API_TOKEN;
+  if (!token) throw new Error("CLICKUP_API_TOKEN not set");
+
+  const res = await fetch(`${API_V3}${path}`, {
+    headers: { Authorization: token, "Content-Type": "application/json" },
+    cache: "no-store",
   });
   if (!res.ok) {
     throw new Error(`ClickUp ${path} → ${res.status} ${res.statusText}`);
@@ -373,4 +389,97 @@ export async function clickupAmgBoard(): Promise<{ tasks: BoardTask[]; statuses:
 /** Move a task to a different status (drag-a-swim-lane equivalent). */
 export async function clickupSetStatus(taskId: string, status: string): Promise<void> {
   await clickup(`/task/${taskId}`, { method: "PUT", body: JSON.stringify({ status }) });
+}
+
+/** A transcribed meeting held as a ClickUp Doc (AI-summarised notes). */
+export interface ClickUpMeetingDoc {
+  id: string;
+  title: string;
+  date: string | null; // ISO — the meeting date, parsed from the doc name
+  url: string;
+  summary: string;
+}
+
+interface RawDocV3 {
+  id: string;
+  name?: string;
+  date_created?: number | string;
+  date_updated?: number | string;
+}
+interface RawDocPageV3 {
+  id: string;
+  content?: string;
+}
+
+/** Pull a meeting date out of a doc name like "AMG Business Meeting - 07/01/2026". */
+function meetingDateFromName(name: string): string | null {
+  const m = name.match(/(\d{1,2})[/-](\d{1,2})[/-](\d{4})/);
+  if (!m) return null;
+  const [, mm, dd, yyyy] = m;
+  const d = new Date(Number(yyyy), Number(mm) - 1, Number(dd));
+  return Number.isNaN(d.getTime()) ? null : d.toISOString();
+}
+
+/** The "Overview" prose (or leading prose) from a doc's markdown, as a short summary. */
+function overviewFromContent(content: string): string {
+  if (!content) return "";
+  const ov = content.match(/#+\s*Overview\s*\n+([\s\S]*?)(?:\n#+\s|\n\s*-\s*\[|$)/i);
+  const block = (ov?.[1] ?? content)
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, "") // strip images
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1") // links → their text
+    .replace(/[*_#>`]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  return block.slice(0, 400);
+}
+
+/**
+ * Transcribed meetings held as ClickUp Docs — the live ClickUp source for the
+ * Meetings index (see lib/meetingsFeed.ts). Lists workspace docs, keeps the
+ * meeting-named ones, and best-effort enriches each with its Overview summary.
+ * Summary enrichment is guarded per-doc: a failure yields an empty summary,
+ * never a broken feed.
+ */
+export async function clickupMeetingDocs(limit = 25): Promise<ClickUpMeetingDoc[]> {
+  const teamId = await resolveTeamId();
+  if (!teamId) return [];
+
+  const params = new URLSearchParams({ limit: "100" });
+  const res = await clickupV3<{ docs?: RawDocV3[] } | RawDocV3[]>(
+    `/workspaces/${teamId}/docs?${params.toString()}`,
+  );
+  const docs = Array.isArray(res) ? res : (res.docs ?? []);
+
+  const meetings = docs
+    .filter((d) => /meeting/i.test(d.name ?? ""))
+    .map((d) => {
+      const name = d.name ?? "Untitled meeting";
+      const created = d.date_created ? new Date(Number(d.date_created)).toISOString() : null;
+      return {
+        id: d.id,
+        title: name,
+        date: meetingDateFromName(name) ?? created,
+        url: `https://app.clickup.com/${teamId}/docs/${d.id}`,
+        summary: "",
+      };
+    })
+    .sort((a, b) => (b.date ?? "").localeCompare(a.date ?? ""))
+    .slice(0, limit);
+
+  // Best-effort Overview summaries, in parallel, each independently guarded.
+  await Promise.all(
+    meetings.map(async (m) => {
+      try {
+        const pages = await clickupV3<{ pages?: RawDocPageV3[] } | RawDocPageV3[]>(
+          `/workspaces/${teamId}/docs/${m.id}/pages?content_format=text%2Fmd&max_page_depth=1`,
+        );
+        const list = Array.isArray(pages) ? pages : (pages.pages ?? []);
+        m.summary = overviewFromContent(list.map((p) => p.content ?? "").join("\n\n"));
+      } catch {
+        // leave summary empty — the card still links to the ClickUp doc
+      }
+    }),
+  );
+
+  return meetings;
 }
