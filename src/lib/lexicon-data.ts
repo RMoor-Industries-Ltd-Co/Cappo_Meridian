@@ -346,6 +346,38 @@ const RAW_TERMS: Omit<LexiconEntry, "category">[] = [
     plain: "Globe chamber with an inner candle world.",
     example: "The World Within Atlas Chamber holds another form beneath the surface.",
   },
+  {
+    term: "Atmos Chamber",
+    meaning: "HVN's candle expression: a flame-lit vessel designed to carry and release a Note into a room.",
+    use: "Impression / product format within HVN Interior Notes.",
+    plain: "Candle.",
+    example: "Light the Atmos Chamber and allow the Note to enter the room.",
+    image: "https://lh3.googleusercontent.com/d/1YL-eFqlrqpv_Bq5PETmrADJJyx8b1YSf",
+  },
+  {
+    term: "Aure",
+    meaning: "HVN's term for the smoke released by an Ember Line during burn.",
+    use: "Ember Line burn-state language.",
+    plain: "Incense smoke.",
+    example: "The Aure rises slowly from the Ember Line.",
+    image: "https://lh3.googleusercontent.com/d/1jFKfBP8sn7XDLkivQV62dZpaHnALb3hD",
+  },
+  {
+    term: "Drift",
+    meaning: "HVN's term for the ash left behind after an Ember Line has completed its burn.",
+    use: "Ember Line post-burn language.",
+    plain: "Incense ash.",
+    example: "Clear the Drift before placing the next Ember Line.",
+    image: "https://lh3.googleusercontent.com/d/1nZOiAgdn2pZYBtQzkTgUxPO7F7ZzaB3D",
+  },
+  {
+    term: "HVN Appointments",
+    meaning: "The full category name for HVN's curated non-proprietary product lane.",
+    use: "Formal category language.",
+    plain: "HVN's curated product selections.",
+    example: "HVN Curated Appointments are selected to support the room's composition.",
+    image: "https://lh3.googleusercontent.com/d/1qsk4TdX8fItuSjXVoi3mLtXgSJbdEOEB",
+  },
 ];
 
 export const LEXICON_TERMS: LexiconEntry[] = RAW_TERMS.map((t) => ({
