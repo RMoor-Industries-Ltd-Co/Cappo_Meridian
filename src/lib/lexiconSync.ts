@@ -47,12 +47,18 @@ export async function getLexiconEntries(): Promise<{ terms: LexiconEntry[]; cate
   if (stored.length === 0) {
     return { terms: STATIC_TERMS, categories: STATIC_CATEGORIES };
   }
+  // The Notion-synced DB doesn't carry term images, so graft them on by name
+  // from the static catalogue — the bundled list is where images are curated.
+  const imageByName = new Map(
+    STATIC_TERMS.filter((t) => t.image).map((t) => [t.term.toLowerCase(), t.image]),
+  );
   const terms: LexiconEntry[] = stored.map((t) => ({
     term: t.name,
     meaning: t.meaning ?? "",
     use: t.use_case ?? "",
     plain: t.plain_meaning ?? "",
     example: t.example ?? "",
+    image: imageByName.get(t.name.toLowerCase()),
     category: t.category,
   }));
   const categories = Array.from(new Set(terms.map((t) => t.category))).sort();
