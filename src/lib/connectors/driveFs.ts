@@ -266,6 +266,28 @@ export async function driveUpload(
   return toItem(data);
 }
 
+/**
+ * Download a file's raw bytes + mime type, using the shared Drive credentials.
+ * Lets the app serve private Drive files (e.g. lexicon images) without the file
+ * needing to be publicly shared — the request is authorized server-side.
+ */
+export async function driveDownload(fileId: string): Promise<{ body: Buffer; mimeType: string }> {
+  const drive = await client();
+  const meta = await drive.files.get({
+    fileId,
+    fields: "mimeType",
+    supportsAllDrives: true,
+  });
+  const res = await drive.files.get(
+    { fileId, alt: "media", supportsAllDrives: true },
+    { responseType: "arraybuffer" },
+  );
+  return {
+    body: Buffer.from(res.data as ArrayBuffer),
+    mimeType: meta.data.mimeType ?? "application/octet-stream",
+  };
+}
+
 /** Create a blank Google Doc in the folder. */
 export async function driveCreateDoc(name: string, parentId = "root"): Promise<DriveItem> {
   const drive = await client();
