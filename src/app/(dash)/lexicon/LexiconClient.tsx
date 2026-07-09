@@ -135,6 +135,11 @@ export function LexiconClient({ terms }: { terms: Term[] }) {
                   src={selectedTerm.image}
                   alt={selectedTerm.term}
                   className="w-full h-72 object-cover"
+                  // Hide the frame entirely if the image can't load, rather than
+                  // leaving a broken-image icon.
+                  onError={(e) => {
+                    (e.currentTarget.parentElement as HTMLElement).style.display = "none";
+                  }}
                 />
               </div>
             )}

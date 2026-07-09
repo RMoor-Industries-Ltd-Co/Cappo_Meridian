@@ -35,7 +35,7 @@ const RAW_TERMS: Omit<LexiconEntry, "category">[] = [
     use: "When referring to sourced or selected objects that support the HVN environment but are not proprietary HVN scent products.",
     plain: "Curated products or objects.",
     example: "The Havenry will include HVN originals and selected Appointments.",
-    image: "https://lh3.googleusercontent.com/d/1XfMO7fLej0FPLR2nThWDDjYCAKfTxMHW",
+    image: "/api/lexicon/image/1XfMO7fLej0FPLR2nThWDDjYCAKfTxMHW",
   },
   {
     term: "Atlas Chamber",
@@ -50,7 +50,7 @@ const RAW_TERMS: Omit<LexiconEntry, "category">[] = [
     use: "Brand philosophy / institutional language.",
     plain: "Intentional control of a space's atmosphere.",
     example: "Atmospheric Jurisdiction begins when the room is no longer left to chance.",
-    image: "https://lh3.googleusercontent.com/d/1YupamxQ5CwnxvTrEPlPEkYmhYHvQQXoT",
+    image: "/api/lexicon/image/1YupamxQ5CwnxvTrEPlPEkYmhYHvQQXoT",
   },
   {
     term: "Cachet Insets",
@@ -128,7 +128,7 @@ const RAW_TERMS: Omit<LexiconEntry, "category">[] = [
     use: "When defining what HVN is as a destination.",
     plain: "A store, redefined through HVN's language.",
     example: "Not a store. A Havenry.",
-    image: "https://lh3.googleusercontent.com/d/1Yb_EEEiAy3MLmIbsTs0UP3FfneUqlzni",
+    image: "/api/lexicon/image/1Yb_EEEiAy3MLmIbsTs0UP3FfneUqlzni",
   },
   {
     term: "HVN",
@@ -150,7 +150,7 @@ const RAW_TERMS: Omit<LexiconEntry, "category">[] = [
     use: "Corporate / institutional brand language.",
     plain: "The HVN company.",
     example: "HVN Global is the institution behind HVN.",
-    image: "https://lh3.googleusercontent.com/d/1wT9Mg_2rwvOOitXxOqVYfNZ3vaXw8q2F",
+    image: "/api/lexicon/image/1wT9Mg_2rwvOOitXxOqVYfNZ3vaXw8q2F",
   },
   {
     term: "HVN Havenry",
@@ -158,7 +158,7 @@ const RAW_TERMS: Omit<LexiconEntry, "category">[] = [
     use: "Formal destination language when both the HVN name and Havenry category need to be stated together.",
     plain: "HVN's Havenry.",
     example: "The HVN Havenry is where the atmosphere is entered, not merely browsed.",
-    image: "https://lh3.googleusercontent.com/d/158-6GDqXkqHaH4APThStZqYFhdIUHxag",
+    image: "/api/lexicon/image/158-6GDqXkqHaH4APThStZqYFhdIUHxag",
   },
   {
     term: "Imperium Sanctum",
@@ -237,7 +237,7 @@ const RAW_TERMS: Omit<LexiconEntry, "category">[] = [
     plain: "HVN's grounded daytime visual tone: dark oak + muted light.",
     example: "shadowed oak daylight interior, masculine quiet-luxury room, dark oak and walnut surfaces, tobacco leather, muted cream stone, aged brass accents, soft daylight through heavy curtains, long architectural shadows, warm gray walls — not bright, not airy, not white.",
     formula: "dark oak + walnut + tobacco leather + muted cream stone + aged brass + filtered daylight",
-    image: "https://lh3.googleusercontent.com/d/1LgR2m6gLcgxLvRAblZbHXqZ0Neq3xSp7",
+    image: "/api/lexicon/image/1LgR2m6gLcgxLvRAblZbHXqZ0Neq3xSp7",
   },
   {
     term: "Shadow Chamber",
@@ -294,7 +294,7 @@ const RAW_TERMS: Omit<LexiconEntry, "category">[] = [
     use: "Formal institutional language.",
     plain: "HVN's cultural/community arm.",
     example: "The Accord of HVN is where the institution speaks beyond the Havenry.",
-    image: "https://lh3.googleusercontent.com/d/1QSK_rrLZjWKxm2EZo2JoS74zqquUVKrr",
+    image: "/api/lexicon/image/1QSK_rrLZjWKxm2EZo2JoS74zqquUVKrr",
   },
   {
     term: "The Havenry",
@@ -302,7 +302,7 @@ const RAW_TERMS: Omit<LexiconEntry, "category">[] = [
     use: "When referring to HVN as the official destination, experience, or proprietary shopping environment.",
     plain: "HVN's official shopping destination.",
     example: "Enter The Havenry by resonance.",
-    image: "https://lh3.googleusercontent.com/d/1DLVLYD_GyKxGqZNnFPqjUQXPQMAtT1jD",
+    image: "/api/lexicon/image/1DLVLYD_GyKxGqZNnFPqjUQXPQMAtT1jD",
   },
   {
     term: "Threshold Chamber",
@@ -352,7 +352,7 @@ const RAW_TERMS: Omit<LexiconEntry, "category">[] = [
     use: "Impression / product format within HVN Interior Notes.",
     plain: "Candle.",
     example: "Light the Atmos Chamber and allow the Note to enter the room.",
-    image: "https://lh3.googleusercontent.com/d/1YL-eFqlrqpv_Bq5PETmrADJJyx8b1YSf",
+    image: "/api/lexicon/image/1YL-eFqlrqpv_Bq5PETmrADJJyx8b1YSf",
   },
   {
     term: "Aure",
@@ -360,7 +360,7 @@ const RAW_TERMS: Omit<LexiconEntry, "category">[] = [
     use: "Ember Line burn-state language.",
     plain: "Incense smoke.",
     example: "The Aure rises slowly from the Ember Line.",
-    image: "https://lh3.googleusercontent.com/d/1jFKfBP8sn7XDLkivQV62dZpaHnALb3hD",
+    image: "/api/lexicon/image/1jFKfBP8sn7XDLkivQV62dZpaHnALb3hD",
   },
   {
     term: "Drift",
@@ -368,7 +368,7 @@ const RAW_TERMS: Omit<LexiconEntry, "category">[] = [
     use: "Ember Line post-burn language.",
     plain: "Incense ash.",
     example: "Clear the Drift before placing the next Ember Line.",
-    image: "https://lh3.googleusercontent.com/d/1nZOiAgdn2pZYBtQzkTgUxPO7F7ZzaB3D",
+    image: "/api/lexicon/image/1nZOiAgdn2pZYBtQzkTgUxPO7F7ZzaB3D",
   },
   {
     term: "HVN Appointments",
@@ -376,7 +376,7 @@ const RAW_TERMS: Omit<LexiconEntry, "category">[] = [
     use: "Formal category language.",
     plain: "HVN's curated product selections.",
     example: "HVN Curated Appointments are selected to support the room's composition.",
-    image: "https://lh3.googleusercontent.com/d/1qsk4TdX8fItuSjXVoi3mLtXgSJbdEOEB",
+    image: "/api/lexicon/image/1qsk4TdX8fItuSjXVoi3mLtXgSJbdEOEB",
   },
 ];
 
