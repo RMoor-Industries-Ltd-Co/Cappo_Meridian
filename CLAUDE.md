@@ -2,6 +2,8 @@
 
 Guidance for Claude (and humans) working in this repo. Read this first.
 
+> **Cross-project contracts and architecture** live in [`rmg-piaar-system`](https://github.com/RMoor-Industries-Ltd-Co/rmg-piaar-system). Read that first for the full system picture — it governs standing rules and cross-repo decisions for the whole PIAAR ecosystem.
+
 ## Project
 
 **Cappo_Meridian** — the project-management hub for **Apex Meridian Group (AMG)**.
