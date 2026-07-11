@@ -1,6 +1,12 @@
 import { getLexiconTerms } from "@/lib/connectors/lexicon";
 import { upsertLexiconTerms, logLexiconSync, listLexiconTerms } from "@/lib/db";
-import { LEXICON_TERMS as STATIC_TERMS, CATEGORIES as STATIC_CATEGORIES, type LexiconEntry } from "@/lib/lexicon-data";
+import {
+  LEXICON_TERMS as STATIC_TERMS,
+  CATEGORIES as STATIC_CATEGORIES,
+  imagesForTerm,
+  canonicalTerm,
+  type LexiconEntry,
+} from "@/lib/lexicon-data";
 
 export interface LexiconSyncResult {
   added: number;
@@ -47,20 +53,20 @@ export async function getLexiconEntries(): Promise<{ terms: LexiconEntry[]; cate
   if (stored.length === 0) {
     return { terms: STATIC_TERMS, categories: STATIC_CATEGORIES };
   }
-  // The Notion-synced DB doesn't carry term images, so graft them on by name
-  // from the static catalogue — the bundled list is where images are curated.
-  const imageByName = new Map(
-    STATIC_TERMS.filter((t) => t.image).map((t) => [t.term.toLowerCase(), t.image]),
-  );
-  const terms: LexiconEntry[] = stored.map((t) => ({
-    term: t.name,
-    meaning: t.meaning ?? "",
-    use: t.use_case ?? "",
-    plain: t.plain_meaning ?? "",
-    example: t.example ?? "",
-    image: imageByName.get(t.name.toLowerCase()),
-    category: t.category,
-  }));
+  // The Notion-synced DB doesn't carry term images, so graft the gallery on by
+  // name from the static catalogue (TERM_IMAGES) — where images are curated.
+  const terms: LexiconEntry[] = stored.map((t) => {
+    const name = canonicalTerm(t.name);
+    return {
+      term: name,
+      meaning: t.meaning ?? "",
+      use: t.use_case ?? "",
+      plain: t.plain_meaning ?? "",
+      example: t.example ?? "",
+      images: imagesForTerm(name),
+      category: t.category,
+    };
+  });
   const categories = Array.from(new Set(terms.map((t) => t.category))).sort();
   return { terms, categories };
 }

@@ -10,7 +10,8 @@ export interface LexiconEntry {
   plain: string;
   example: string;
   formula?: string;
-  image?: string;
+  /** Proxy paths for this term's image gallery (see TERM_IMAGES). */
+  images?: string[];
   category: string;
 }
 
@@ -35,7 +36,6 @@ const RAW_TERMS: Omit<LexiconEntry, "category">[] = [
     use: "When referring to sourced or selected objects that support the HVN environment but are not proprietary HVN scent products.",
     plain: "Curated products or objects.",
     example: "The Havenry will include HVN originals and selected Appointments.",
-    image: "/api/lexicon/image/1XfMO7fLej0FPLR2nThWDDjYCAKfTxMHW",
   },
   {
     term: "Atlas Chamber",
@@ -50,7 +50,6 @@ const RAW_TERMS: Omit<LexiconEntry, "category">[] = [
     use: "Brand philosophy / institutional language.",
     plain: "Intentional control of a space's atmosphere.",
     example: "Atmospheric Jurisdiction begins when the room is no longer left to chance.",
-    image: "/api/lexicon/image/1YupamxQ5CwnxvTrEPlPEkYmhYHvQQXoT",
   },
   {
     term: "Cachet Insets",
@@ -128,7 +127,6 @@ const RAW_TERMS: Omit<LexiconEntry, "category">[] = [
     use: "When defining what HVN is as a destination.",
     plain: "A store, redefined through HVN's language.",
     example: "Not a store. A Havenry.",
-    image: "/api/lexicon/image/1Yb_EEEiAy3MLmIbsTs0UP3FfneUqlzni",
   },
   {
     term: "HVN",
@@ -150,7 +148,6 @@ const RAW_TERMS: Omit<LexiconEntry, "category">[] = [
     use: "Corporate / institutional brand language.",
     plain: "The HVN company.",
     example: "HVN Global is the institution behind HVN.",
-    image: "/api/lexicon/image/1wT9Mg_2rwvOOitXxOqVYfNZ3vaXw8q2F",
   },
   {
     term: "HVN Havenry",
@@ -158,7 +155,6 @@ const RAW_TERMS: Omit<LexiconEntry, "category">[] = [
     use: "Formal destination language when both the HVN name and Havenry category need to be stated together.",
     plain: "HVN's Havenry.",
     example: "The HVN Havenry is where the atmosphere is entered, not merely browsed.",
-    image: "/api/lexicon/image/158-6GDqXkqHaH4APThStZqYFhdIUHxag",
   },
   {
     term: "Imperium Sanctum",
@@ -237,7 +233,6 @@ const RAW_TERMS: Omit<LexiconEntry, "category">[] = [
     plain: "HVN's grounded daytime visual tone: dark oak + muted light.",
     example: "shadowed oak daylight interior, masculine quiet-luxury room, dark oak and walnut surfaces, tobacco leather, muted cream stone, aged brass accents, soft daylight through heavy curtains, long architectural shadows, warm gray walls — not bright, not airy, not white.",
     formula: "dark oak + walnut + tobacco leather + muted cream stone + aged brass + filtered daylight",
-    image: "/api/lexicon/image/1LgR2m6gLcgxLvRAblZbHXqZ0Neq3xSp7",
   },
   {
     term: "Shadow Chamber",
@@ -294,7 +289,6 @@ const RAW_TERMS: Omit<LexiconEntry, "category">[] = [
     use: "Formal institutional language.",
     plain: "HVN's cultural/community arm.",
     example: "The Accord of HVN is where the institution speaks beyond the Havenry.",
-    image: "/api/lexicon/image/1QSK_rrLZjWKxm2EZo2JoS74zqquUVKrr",
   },
   {
     term: "The Havenry",
@@ -302,7 +296,6 @@ const RAW_TERMS: Omit<LexiconEntry, "category">[] = [
     use: "When referring to HVN as the official destination, experience, or proprietary shopping environment.",
     plain: "HVN's official shopping destination.",
     example: "Enter The Havenry by resonance.",
-    image: "/api/lexicon/image/1DLVLYD_GyKxGqZNnFPqjUQXPQMAtT1jD",
   },
   {
     term: "Threshold Chamber",
@@ -352,7 +345,6 @@ const RAW_TERMS: Omit<LexiconEntry, "category">[] = [
     use: "Impression / product format within HVN Interior Notes.",
     plain: "Candle.",
     example: "Light the Atmos Chamber and allow the Note to enter the room.",
-    image: "/api/lexicon/image/1YL-eFqlrqpv_Bq5PETmrADJJyx8b1YSf",
   },
   {
     term: "Aure",
@@ -360,7 +352,6 @@ const RAW_TERMS: Omit<LexiconEntry, "category">[] = [
     use: "Ember Line burn-state language.",
     plain: "Incense smoke.",
     example: "The Aure rises slowly from the Ember Line.",
-    image: "/api/lexicon/image/1jFKfBP8sn7XDLkivQV62dZpaHnALb3hD",
   },
   {
     term: "Drift",
@@ -368,7 +359,6 @@ const RAW_TERMS: Omit<LexiconEntry, "category">[] = [
     use: "Ember Line post-burn language.",
     plain: "Incense ash.",
     example: "Clear the Drift before placing the next Ember Line.",
-    image: "/api/lexicon/image/1nZOiAgdn2pZYBtQzkTgUxPO7F7ZzaB3D",
   },
   {
     term: "HVN Appointments",
@@ -376,12 +366,152 @@ const RAW_TERMS: Omit<LexiconEntry, "category">[] = [
     use: "Formal category language.",
     plain: "HVN's curated product selections.",
     example: "HVN Curated Appointments are selected to support the room's composition.",
-    image: "/api/lexicon/image/1qsk4TdX8fItuSjXVoi3mLtXgSJbdEOEB",
+  },
+  {
+    term: "Ember Line",
+    meaning: "HVN's incense expression, designed to carry a Note through controlled burn, Aure, and Drift.",
+    use: "Impression / product format within HVN Interior Notes.",
+    plain: "Incense.",
+    example: "Place the Ember Line and allow the Aure to enter the room.",
+  },
+  {
+    term: "Dual Ember Line",
+    meaning: "An Ember Line configuration that begins as one incense form and separates into two controlled burn paths.",
+    use: "Ember Line subformat / product design language.",
+    plain: "Split-path incense.",
+    example: "The Dual Ember Line divides the burn into two measured paths.",
+  },
+  {
+    term: "Flat Ember Line",
+    meaning: "A minimalist Ember Line configuration expressed as one clean, continuous horizontal burn path.",
+    use: "Ember Line subformat / visual and product design language.",
+    plain: "Single-line incense.",
+    example: "The Flat Ember Line leaves one uninterrupted Drift across the stone.",
+  },
+  {
+    term: "Prime Anchor",
+    meaning: "HVN's porous scent-holding object, designed to receive a Note and release it gradually into its surrounding atmosphere.",
+    use: "Impression / product-object format within HVN Interior Notes.",
+    plain: "Scent anchor object.",
+    example: "Apply the Note to the Prime Anchor and allow it to hold the room quietly.",
+  },
+  {
+    term: "Framing Mist",
+    meaning: "HVN's spray expression, designed to place a Note across a room, fabric, body, or enclosed atmosphere.",
+    use: "Impression / product format within HVN Interior Notes.",
+    plain: "Room, fabric, or body mist.",
+    example: "Use the Framing Mist to place the Note along the room's perimeter.",
+  },
+  {
+    term: "Stem Sets",
+    meaning: "HVN's reed diffuser expression, using a vessel and scent-bearing stems to release a Note over time.",
+    use: "Impression / product format within HVN Interior Notes.",
+    plain: "Reed diffuser.",
+    example: "Set the Stem Sets in place and let the Note travel through the room over time.",
+  },
+  {
+    term: "Linenfold",
+    meaning: "HVN's fabric and laundry scent expression, designed to carry a Note into linens, garments, and other soft materials.",
+    use: "Impression / product format within HVN Interior Notes.",
+    plain: "Dryer sheets or fabric scent products.",
+    example: "Place the Linenfold with the wash and let the Note remain in the fabric.",
+  },
+  {
+    term: "Terrain Reservoir",
+    meaning: "A Tempering Reservoir form with a sculpted topographic basin where scented oil rests.",
+    use: "Tempering Reservoir subcategory.",
+    plain: "Topographic oil basin.",
+    example: "The Terrain Reservoir lets the oil settle into a carved landscape.",
+  },
+  {
+    term: "Civil Twilight",
+    meaning: "HVN's exterior transition tone, where remaining daylight and controlled artificial light share the space.",
+    use: "Visual direction for patios, decks, outdoor dining, exterior Appointments, and early-evening outdoor scenes.",
+    plain: "HVN's refined outdoor dusk tone.",
+    example: "The terrace was shown in Civil Twilight, where the last daylight held against the first warm lights.",
+  },
+  {
+    term: "Low Ember",
+    meaning: "HVN's restrained night tone, built around controlled warmth, intimacy, and atmosphere without theatricality.",
+    use: "Visual direction for after-dark Interior Notes, Impressions, Appointments, room scenes, and campaign material.",
+    plain: "HVN's controlled nighttime visual tone.",
+    example: "The Ember Line was presented in Low Ember: oil-black stone, smoked leather, aged brass, and controlled amber light.",
   },
 ];
 
+/**
+ * Drive file ids for each term's image gallery, in display order. Files live in
+ * the HVN Lexicon Drive folder and are served through /api/lexicon/image/{id}
+ * (so private files render without public sharing). Multiple ids render as a
+ * scrolling gallery of that category's versions in the term modal.
+ */
+export const TERM_IMAGES: Record<string, string[]> = {
+  Appointments: ["1XfMO7fLej0FPLR2nThWDDjYCAKfTxMHW"],
+  "Atmos Chamber": ["1YL-eFqlrqpv_Bq5PETmrADJJyx8b1YSf"],
+  "Atmospheric Jurisdiction": ["1YupamxQ5CwnxvTrEPlPEkYmhYHvQQXoT"],
+  Aure: ["1jFKfBP8sn7XDLkivQV62dZpaHnALb3hD"],
+  "Channel Anchor": ["1UBDXxSWNofPUx_fMgGZQmYBB1fTxS0FY"],
+  "Civil Twilight": ["1iWkw6BUoNQ08qJ2FoPPiaWlNPJcTS7Pt", "1ZUk4rfpyfy_rjItBdj_4SrcLyzIzSZsl"],
+  "Column Chamber": ["16DT0rDLCNTH5QuMWozT80AD6t0D7OhU6"],
+  "Continuous Ember Line": ["1IDoGHg6y6VoV0rh1EVvi6J_QhbF6hPm0"],
+  "Cradle Chamber": ["1AsZeBhiOyvKd-cIcR-nCBOX6rqUGSd7R"],
+  DeepRest: ["1KjVRzAxe0yBCxl7DKyWvTezZpQxGfdVA"],
+  Drift: ["1nZOiAgdn2pZYBtQzkTgUxPO7F7ZzaB3D"],
+  "Dual Ember Line": ["1BCAlWY4vGrTqhfVf3Rv57JRqz_iCT2mu"],
+  "Elemental Sanctum": ["1qshzccL67bDPmGWjDV-yw6DpAn5uMki5"],
+  "Flat Ember Line": ["1Gz8UgtsR8kvmZwIfji8T44UuNGVvq6WG"],
+  Havenry: ["1Yb_EEEiAy3MLmIbsTs0UP3FfneUqlzni", "1sjfTe4G4SoH8aOPJEg6o55S1tqJVAyJ8"],
+  HVN: ["18oK1mDxvyZqMCOYPrxAPabGcJnCOKq5r"],
+  "HVN Appointments": ["1qsk4TdX8fItuSjXVoi3mLtXgSJbdEOEB"],
+  "HVN Global": ["1wT9Mg_2rwvOOitXxOqVYfNZ3vaXw8q2F", "13Sew5wXI0JevMppQdt-VSGHcBmKfgNke"],
+  "HVN Havenry": ["158-6GDqXkqHaH4APThStZqYFhdIUHxag"],
+  "Imperium Sanctum": ["1wI5sEN1brENQVj_aqtYdQqFd4UjLYoe0", "1HR3Q60lBJGoAns_DgdVsumFZZlXJ6omZ"],
+  Linenfold: ["1ocoY9gtKMyfiuO8QxDtXh0AA2jL44-xW"],
+  "Low Ember": ["1VfwLph-L0zaVd1KSoqHeXjausy59IMJl"],
+  "Obelisk Anchor": ["11eSu3A8AzsX6BUBC_iMHeAWr4ZqmLKEa"],
+  "Object Reveal Atlas Chamber": ["1pKt4ZxVWQavQsWqcHp94phJD6xdtppzP"],
+  "Obsidian Sanctum": ["1rzrFfDKOw5jIG6nQJIDi6bAvtVK20HJ3"],
+  "Porous Ceramic Monolith Anchor": ["1pb5oBGudAmy0s1fE9qEFxDSHW1amIvkn"],
+  "Regalia Sanctum": ["1YSMB5LnOz4IbFpsmsh-_X0tnTXU4KYTA", "1I8vsoEcUMiMmy1EvC-SXBEV3SCB7FKaV"],
+  "Reveal Atlas Chamber": ["1ZAi4anrOlNJt2ekcAgI-4DTCBZ3odK9m"],
+  Sanctum: ["1Pf50LFHPuFMs4G5yOKe_KASSb71KcDen"],
+  "Segmented Ember Line": ["1BSFLyEaKB6XBr0GHAGK86S96YJaz1C8q"],
+  "Shadowed Oak Daylight": ["11fIOavG4P23Q07Pw-H9jnkM7M49WsyaQ"],
+  "Statuary Chamber": ["19y7vzUZV1su7ba5qEMe7gXU_0ErKQvyb"],
+  "Stem Comb": ["15JWeTXRlnLfEGUYazUhQa8uj_2dPO7a-"],
+  "Stem Sets": ["1At8Ln7mRkl5n4y_nOBAkTnWkxDjQvVAR"],
+  "Stone Puck Anchor": ["1Hz9xYG4XvrRYFBX56b6uBCkQTxhZRQo9"],
+  "The Accord of HVN": ["1QSK_rrLZjWKxm2EZo2JoS74zqquUVKrr"],
+  "The Havenry": ["1DLVLYD_GyKxGqZNnFPqjUQXPQMAtT1jD"],
+  "Threshold Chamber": ["1lZ1RG1B-2zPMOmOLq9VR22194DXbCkow"],
+  "Tile Anchor": ["1yNdtW5RRlxidENwVZLEWVx43L9O4jOnc"],
+  "Transformational Atlas Chamber": ["12xQjx4SQVMPzbSqCdMKmlRb3uQDCrkiH"],
+  "Transitional Ember Line": ["12UXVEDL4ZfVvMuwW8UWSDqgNyWZvAkar"],
+  "World Within Atlas Chamber": ["1EC3j45QUvs9FNowIq6mEfqk4VdsfZ4oc", "12OFMrjEFB1I21C0uOLBjnX7-ca4e4T3i"],
+};
+
+/** Proxy image paths for a term's gallery, in order ([] when it has none). */
+export function imagesForTerm(term: string): string[] {
+  return (TERM_IMAGES[term] ?? []).map((id) => `/api/lexicon/image/${id}`);
+}
+
+/**
+ * Corrections for known Notion term-name typos, applied when reading the synced
+ * copy so the app shows the right name (and matches its images) before the
+ * Notion source is fixed. Remove an entry once Notion is corrected.
+ */
+export const TERM_RENAMES: Record<string, string> = {
+  Linenfoldsin: "Linenfold",
+};
+
+/** The corrected display name for a term (identity when no correction applies). */
+export function canonicalTerm(name: string): string {
+  return TERM_RENAMES[name] ?? name;
+}
+
 export const LEXICON_TERMS: LexiconEntry[] = RAW_TERMS.map((t) => ({
   ...t,
+  images: imagesForTerm(t.term),
   category: categorize(t.term),
 }));
 
