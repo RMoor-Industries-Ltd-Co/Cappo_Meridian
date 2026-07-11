@@ -10,7 +10,7 @@ interface Term {
   plain: string;
   example: string;
   formula?: string;
-  image?: string;
+  images?: string[];
 }
 
 const ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
@@ -128,19 +128,30 @@ export function LexiconClient({ terms }: { terms: Term[] }) {
             {/* Gold top accent */}
             <div className="absolute inset-x-0 top-0 h-px rounded-t-2xl bg-gradient-to-r from-transparent via-gold/60 to-transparent" />
 
-            {/* Image — full-width hero */}
-            {selectedTerm.image && (
-              <div className="w-full overflow-hidden rounded-t-2xl">
-                <img
-                  src={selectedTerm.image}
-                  alt={selectedTerm.term}
-                  className="w-full h-72 object-cover"
-                  // Hide the frame entirely if the image can't load, rather than
-                  // leaving a broken-image icon.
-                  onError={(e) => {
-                    (e.currentTarget.parentElement as HTMLElement).style.display = "none";
-                  }}
-                />
+            {/* Image gallery — a horizontal, swipeable filmstrip of every
+                version for this category. Scrolls independently while the
+                modal is open. Individual images that fail to load hide
+                themselves rather than showing a broken icon. */}
+            {selectedTerm.images && selectedTerm.images.length > 0 && (
+              <div className="relative">
+                <div className="flex w-full snap-x snap-mandatory overflow-x-auto rounded-t-2xl">
+                  {selectedTerm.images.map((src, i) => (
+                    <img
+                      key={src}
+                      src={src}
+                      alt={`${selectedTerm.term} — ${i + 1}`}
+                      className="h-72 w-full flex-none snap-center object-cover"
+                      onError={(e) => {
+                        e.currentTarget.style.display = "none";
+                      }}
+                    />
+                  ))}
+                </div>
+                {selectedTerm.images.length > 1 && (
+                  <span className="pointer-events-none absolute right-2 top-2 rounded-full bg-black/60 px-2 py-0.5 text-[10px] font-medium text-white">
+                    {selectedTerm.images.length} versions · scroll →
+                  </span>
+                )}
               </div>
             )}
 
