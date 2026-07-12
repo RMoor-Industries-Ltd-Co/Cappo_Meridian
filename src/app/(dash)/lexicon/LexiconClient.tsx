@@ -15,6 +15,79 @@ interface Term {
 
 const ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
 
+/**
+ * Auto-revolving image gallery for a term's definition card. With more than one
+ * version it crossfades through them on a loop; hovering or touching pauses it
+ * so a version can be studied, dots jump to a specific one, and reduced-motion
+ * users get no auto-advance. Images that fail to load drop out of the rotation.
+ */
+function TermCarousel({ images, term }: { images: string[]; term: string }) {
+  const [broken, setBroken] = useState<Set<number>>(new Set());
+  const [active, setActive] = useState(0);
+  const [paused, setPaused] = useState(false);
+
+  const visible = images.map((src, i) => ({ src, i })).filter(({ i }) => !broken.has(i));
+  const shownIdx = visible.length ? active % visible.length : 0;
+  const shown = visible[shownIdx];
+
+  useEffect(() => {
+    if (visible.length <= 1 || paused) return;
+    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
+    const id = setInterval(() => setActive((a) => a + 1), 3800);
+    return () => clearInterval(id);
+  }, [visible.length, paused]);
+
+  if (visible.length === 0) return null;
+
+  return (
+    <div
+      className="relative"
+      onMouseEnter={() => setPaused(true)}
+      onMouseLeave={() => setPaused(false)}
+      onTouchStart={() => setPaused(true)}
+    >
+      <div className="relative h-72 w-full overflow-hidden rounded-t-2xl bg-panel-2">
+        {images.map((src, i) => (
+          <img
+            key={src}
+            src={src}
+            alt={`${term} — ${i + 1}`}
+            className={`absolute inset-0 h-72 w-full object-cover transition-opacity duration-700 ${
+              shown?.i === i ? "opacity-100" : "opacity-0"
+            }`}
+            onError={() =>
+              setBroken((b) => {
+                const next = new Set(b);
+                next.add(i);
+                return next;
+              })
+            }
+          />
+        ))}
+      </div>
+      {visible.length > 1 && (
+        <>
+          <span className="pointer-events-none absolute right-2 top-2 rounded-full bg-black/60 px-2 py-0.5 text-[10px] font-medium text-white">
+            {shownIdx + 1} / {visible.length}
+          </span>
+          <div className="absolute inset-x-0 bottom-2 flex justify-center gap-1.5">
+            {visible.map(({ i }, idx) => (
+              <button
+                key={i}
+                aria-label={`View version ${idx + 1} of ${term}`}
+                onClick={() => setActive(idx)}
+                className={`h-1.5 rounded-full transition-all ${
+                  shownIdx === idx ? "w-4 bg-gold" : "w-1.5 bg-white/50 hover:bg-white/80"
+                }`}
+              />
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 export function LexiconClient({ terms }: { terms: Term[] }) {
   const [activeLetter, setActiveLetter] = useState<string | null>(null);
   const [selectedTerm, setSelectedTerm] = useState<Term | null>(null);
@@ -128,31 +201,10 @@ export function LexiconClient({ terms }: { terms: Term[] }) {
             {/* Gold top accent */}
             <div className="absolute inset-x-0 top-0 h-px rounded-t-2xl bg-gradient-to-r from-transparent via-gold/60 to-transparent" />
 
-            {/* Image gallery — a horizontal, swipeable filmstrip of every
-                version for this category. Scrolls independently while the
-                modal is open. Individual images that fail to load hide
-                themselves rather than showing a broken icon. */}
+            {/* Image gallery — auto-revolving carousel of every version for
+                this category (crossfades on a loop, pauses on hover/touch). */}
             {selectedTerm.images && selectedTerm.images.length > 0 && (
-              <div className="relative">
-                <div className="flex w-full snap-x snap-mandatory overflow-x-auto rounded-t-2xl">
-                  {selectedTerm.images.map((src, i) => (
-                    <img
-                      key={src}
-                      src={src}
-                      alt={`${selectedTerm.term} — ${i + 1}`}
-                      className="h-72 w-full flex-none snap-center object-cover"
-                      onError={(e) => {
-                        e.currentTarget.style.display = "none";
-                      }}
-                    />
-                  ))}
-                </div>
-                {selectedTerm.images.length > 1 && (
-                  <span className="pointer-events-none absolute right-2 top-2 rounded-full bg-black/60 px-2 py-0.5 text-[10px] font-medium text-white">
-                    {selectedTerm.images.length} versions · scroll →
-                  </span>
-                )}
-              </div>
+              <TermCarousel images={selectedTerm.images} term={selectedTerm.term} />
             )}
 
             <div className="p-6">
