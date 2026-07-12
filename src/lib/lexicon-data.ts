@@ -474,6 +474,7 @@ export const TERM_IMAGES: Record<string, string[]> = {
   "Obsidian Sanctum": ["1rzrFfDKOw5jIG6nQJIDi6bAvtVK20HJ3"],
   "Porous Ceramic Monolith Anchor": ["1pb5oBGudAmy0s1fE9qEFxDSHW1amIvkn"],
   "Regalia Sanctum": ["1YSMB5LnOz4IbFpsmsh-_X0tnTXU4KYTA", "1I8vsoEcUMiMmy1EvC-SXBEV3SCB7FKaV"],
+  "Repose Cushion": ["1WsyXaHLD8OKHcSFc1AbZJ2IDDWz6lU5h"],
   "Reveal Atlas Chamber": ["1ZAi4anrOlNJt2ekcAgI-4DTCBZ3odK9m"],
   Sanctum: ["1Pf50LFHPuFMs4G5yOKe_KASSb71KcDen"],
   "Segmented Ember Line": ["1BSFLyEaKB6XBr0GHAGK86S96YJaz1C8q"],
