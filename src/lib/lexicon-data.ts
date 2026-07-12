@@ -459,6 +459,7 @@ export const TERM_IMAGES: Record<string, string[]> = {
   Drift: ["1nZOiAgdn2pZYBtQzkTgUxPO7F7ZzaB3D"],
   "Dual Ember Line": ["1BCAlWY4vGrTqhfVf3Rv57JRqz_iCT2mu"],
   "Elemental Sanctum": ["1qshzccL67bDPmGWjDV-yw6DpAn5uMki5"],
+  "Ember Line": ["17-x-z-ebW-CH4UqKOC10q6pOxJM0YXQa"],
   "Flat Ember Line": ["1Gz8UgtsR8kvmZwIfji8T44UuNGVvq6WG"],
   Havenry: ["1Yb_EEEiAy3MLmIbsTs0UP3FfneUqlzni", "1sjfTe4G4SoH8aOPJEg6o55S1tqJVAyJ8"],
   HVN: ["18oK1mDxvyZqMCOYPrxAPabGcJnCOKq5r"],
