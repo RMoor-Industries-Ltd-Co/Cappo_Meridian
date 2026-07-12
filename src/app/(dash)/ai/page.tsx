@@ -16,6 +16,8 @@ import {
   X,
   Paperclip,
   Loader2,
+  RotateCcw,
+  AlertTriangle,
 } from "lucide-react";
 import { Starburst } from "@/components/brand/Starburst";
 
@@ -76,6 +78,7 @@ export default function AiPage() {
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
+  const [errorBanner, setErrorBanner] = useState<{ message: string; retry: () => void } | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -247,6 +250,17 @@ export default function AiPage() {
     setAttachments((a) => a.filter((x) => x.uid !== uid));
   }
 
+  /** A failed network request (as opposed to a raw browser TypeError) should never
+   * be shown to Rahm/partners verbatim — log it for diagnosis, show something
+   * actionable instead. */
+  function friendlyErrorMessage(err: unknown): string {
+    if (err instanceof TypeError) {
+      // The browser's own message for a failed fetch() — network/DNS/CORS/offline.
+      return "Cappo could not connect to the service. Please retry.";
+    }
+    return err instanceof Error ? err.message : "Something went wrong. Please retry.";
+  }
+
   async function send(text: string) {
     const trimmed = text.trim();
     if ((!trimmed && attachments.length === 0) || streaming) return;
@@ -258,6 +272,7 @@ export default function AiPage() {
       fullText += "\n\n" + readyAtts.map((a) => `📎 [${a.name}](${a.driveUrl})`).join("\n");
     }
     setAttachments([]);
+    setErrorBanner(null);
 
     let pid = activeId;
     if (persistent && !pid) {
@@ -266,17 +281,6 @@ export default function AiPage() {
     }
 
     const next: ChatMessage[] = [...messages, { role: "user", content: fullText }];
-    setMessages([...next, { role: "assistant", content: "" }]);
-    setInput("");
-    setStreaming(true);
-
-    const appendToLast = (chunk: string) =>
-      setMessages((m) => {
-        const copy = [...m];
-        const last = copy[copy.length - 1];
-        copy[copy.length - 1] = { role: "assistant", content: last.content + chunk };
-        return copy;
-      });
 
     // Build multimodal blocks for ready attachments (images, PDFs, text/code)
     const attachmentBlocks = readyAtts.flatMap((a): { type: string; mimeType?: string; base64?: string; content?: string; name: string }[] => {
@@ -292,6 +296,38 @@ export default function AiPage() {
       return []; // video/audio: already in fullText as Drive link
     });
 
+    setInput("");
+    await runRequest(next, pid, attachmentBlocks);
+  }
+
+  /** Fires the actual network request for a (possibly retried) turn. Separated from
+   * send() so a retry can re-issue the identical request without duplicating the
+   * user's message in the transcript. */
+  async function runRequest(
+    next: ChatMessage[],
+    pid: string | null,
+    attachmentBlocks: { type: string; mimeType?: string; base64?: string; content?: string; name: string }[]
+  ) {
+    setMessages([...next, { role: "assistant", content: "" }]);
+    setStreaming(true);
+
+    const appendToLast = (chunk: string) =>
+      setMessages((m) => {
+        const copy = [...m];
+        const last = copy[copy.length - 1];
+        copy[copy.length - 1] = { role: "assistant", content: last.content + chunk };
+        return copy;
+      });
+
+    const fail = (label: string, err: unknown) => {
+      console.error(`[ai chat] ${label} failed:`, err);
+      setMessages(next); // drop the empty assistant placeholder; keep the user's turn
+      setErrorBanner({
+        message: friendlyErrorMessage(err),
+        retry: () => runRequest(next, pid, attachmentBlocks),
+      });
+    };
+
     // Claude always uses the act (tool-use) path; other providers stream.
     if (isCappo) {
       try {
@@ -305,10 +341,15 @@ export default function AiPage() {
             attachmentBlocks: attachmentBlocks.length ? attachmentBlocks : undefined,
           }),
         });
-        const d = await res.json().catch(() => ({}));
-        appendToLast(res.ok ? d.reply || "(no reply)" : `⚠️ ${d.error || res.statusText}`);
+        if (!res.ok) {
+          const d = await res.json().catch(() => ({}));
+          fail("/api/ai/act", new Error(d.error || res.statusText));
+        } else {
+          const d = await res.json().catch(() => ({}));
+          appendToLast(d.reply || "(no reply)");
+        }
       } catch (err) {
-        appendToLast(`⚠️ ${err instanceof Error ? err.message : String(err)}`);
+        fail("/api/ai/act", err);
       } finally {
         setStreaming(false);
       }
@@ -323,7 +364,7 @@ export default function AiPage() {
       });
       if (!res.ok || !res.body) {
         const e = await res.json().catch(() => ({}));
-        appendToLast(`⚠️ ${e.error || res.statusText}`);
+        fail("/api/ai/chat", new Error(e.error || res.statusText));
         return;
       }
       const reader = res.body.getReader();
@@ -334,7 +375,7 @@ export default function AiPage() {
         appendToLast(dec.decode(value, { stream: true }));
       }
     } catch (err) {
-      appendToLast(`\n\n⚠️ ${err instanceof Error ? err.message : String(err)}`);
+      fail("/api/ai/chat", err);
     } finally {
       setStreaming(false);
     }
@@ -431,23 +472,22 @@ export default function AiPage() {
 
       {/* Chat surface */}
       <section className="panel panel-gold relative flex flex-1 flex-col overflow-hidden">
-        <div className="flex items-center gap-2 border-b border-border px-5 py-3">
-          <Sparkles size={18} className="text-gold" />
-          <h1 className="text-sm font-semibold text-fg">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 border-b border-border px-5 py-3">
+          <Sparkles size={18} className="shrink-0 text-gold" />
+          <h1 className="min-w-0 flex-1 truncate text-sm font-semibold text-fg">
             {activeId ? projects.find((p) => p.id === activeId)?.name ?? "AI Workspace" : "AI Workspace"}
           </h1>
-          <div className="ml-auto flex items-center gap-2">
-            <span className="text-[10px] uppercase tracking-wide text-subtle">AI</span>
+          <div className="flex min-w-0 shrink-0 flex-wrap items-center gap-1.5">
+            <span className="shrink-0 text-[10px] uppercase tracking-wide text-subtle">AI</span>
             <select
               value={provider}
               onChange={(e) => changeProvider(e.target.value)}
-              className="rounded-md border border-border-strong bg-panel px-2 py-1 text-xs font-medium text-gold focus:outline-none"
+              className="max-w-[9.5rem] shrink-0 truncate rounded-md border border-border-strong bg-panel px-2 py-1 text-xs font-medium text-gold focus:outline-none"
               title="Switch AI provider"
             >
               {providers.map((p) => (
                 <option key={p.id} value={p.id}>
-                  {p.label}
-                  {p.configured ? "" : " (not configured)"}
+                  {p.configured ? p.label : `${p.label} — not configured`}
                 </option>
               ))}
             </select>
@@ -455,7 +495,7 @@ export default function AiPage() {
               <select
                 value={model}
                 onChange={(e) => setModel(e.target.value)}
-                className="rounded-md border border-border bg-panel px-2 py-1 text-xs text-muted focus:outline-none"
+                className="max-w-[11rem] shrink-0 truncate rounded-md border border-border bg-panel px-2 py-1 text-xs text-muted focus:outline-none"
                 title="Switch model"
               >
                 {activeProvider.models.map((m) => (
@@ -517,6 +557,22 @@ export default function AiPage() {
         </div>
 
         <div className="border-t border-border p-4">
+          {/* Connection / request error banner */}
+          {errorBanner && (
+            <div className="mx-auto mb-2 flex max-w-3xl items-center gap-2 rounded-lg border border-neg/40 bg-neg/10 px-3 py-2 text-xs text-neg">
+              <AlertTriangle size={14} className="shrink-0" />
+              <span className="flex-1">{errorBanner.message}</span>
+              <button
+                onClick={() => errorBanner.retry()}
+                className="flex shrink-0 items-center gap-1 rounded-md border border-neg/40 px-2 py-1 font-medium hover:bg-neg/15"
+              >
+                <RotateCcw size={11} /> Retry
+              </button>
+              <button onClick={() => setErrorBanner(null)} className="shrink-0 text-neg/70 hover:text-neg" title="Dismiss">
+                <X size={12} />
+              </button>
+            </div>
+          )}
           {/* Attachment chips */}
           {attachments.length > 0 && (
             <div className="mx-auto mb-2 flex max-w-3xl flex-wrap gap-1.5">
@@ -578,14 +634,6 @@ export default function AiPage() {
               title="Send"
             >
               {streaming ? <Loader2 size={14} className="animate-spin" /> : <ArrowUp size={16} />}
-            </button>
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              className="shrink-0 text-subtle hover:text-muted"
-              title="Attach file (images, video, PDF, code, docs)"
-              disabled={streaming}
-            >
-              <Paperclip size={16} />
             </button>
           </div>
           <p className="mx-auto mt-1.5 max-w-3xl text-center text-[11px] text-subtle">
