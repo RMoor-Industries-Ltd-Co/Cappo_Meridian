@@ -3,34 +3,102 @@
 import { useState, useCallback } from "react";
 import { Heart, CheckCircle } from "lucide-react";
 import type { LexiconEntry } from "@/lib/lexicon-data";
+import { USAGE_TF } from "@/lib/quiz-usage";
 import { ValeHost } from "./ValeHost";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
-interface Question {
-  mode: "a" | "b";
-  term: LexiconEntry;
+/**
+ * Two question kinds today; the discriminated union leaves room for the planned
+ * fill-in-the-blank and sample-conversation kinds. Every question carries an
+ * `explanation` shown after answering (the teaching moment), and `correct` is a
+ * plain string in both so the answer handler stays kind-agnostic.
+ */
+interface ChoiceQuestion {
+  kind: "choice";
+  promptLabel: string;
+  prompt: string;
   correct: string;
   options: string[];
+  explanation: string;
 }
+interface TrueFalseQuestion {
+  kind: "tf";
+  statement: string;
+  correct: "True" | "False";
+  explanation: string;
+}
+type Question = ChoiceQuestion | TrueFalseQuestion;
 
 type Screen = "start" | "quiz" | "results";
 
-// ─── Question generator ───────────────────────────────────────────────────────
+// ─── Question generators ──────────────────────────────────────────────────────
 
-function generateQuestions(terms: LexiconEntry[], count = 10): Question[] {
-  const shuffled = [...terms].sort(() => Math.random() - 0.5).slice(0, count);
-  return shuffled.map((term) => {
-    const mode: "a" | "b" = Math.random() > 0.5 ? "a" : "b";
-    const correct = mode === "a" ? term.plain : term.term;
-    const pool = terms.filter((t) => t.term !== term.term);
-    const wrong = pool
-      .sort(() => Math.random() - 0.5)
-      .slice(0, 3)
-      .map((t) => (mode === "a" ? t.plain : t.term));
-    const options = [...wrong, correct].sort(() => Math.random() - 0.5);
-    return { mode, term, correct, options };
-  });
+const rnd = () => Math.random() - 0.5;
+const lc = (s: string) => (s ? s.charAt(0).toLowerCase() + s.slice(1) : s);
+
+function choiceFromTerm(term: LexiconEntry, terms: LexiconEntry[]): ChoiceQuestion {
+  const mode: "a" | "b" = Math.random() > 0.5 ? "a" : "b";
+  const correct = mode === "a" ? term.plain : term.term;
+  const wrong = terms
+    .filter((t) => t.term !== term.term)
+    .sort(rnd)
+    .slice(0, 3)
+    .map((t) => (mode === "a" ? t.plain : t.term));
+  const options = [...wrong, correct].sort(rnd);
+  return {
+    kind: "choice",
+    promptLabel: mode === "a" ? "What does this term mean?" : "Name this term",
+    prompt: mode === "a" ? term.term : term.plain,
+    correct,
+    options,
+    explanation: `${term.term} — ${term.meaning}${term.use ? ` (${term.use})` : ""}`,
+  };
+}
+
+/** Auto true/false: a term paired with its own meaning (true) or another's (false). */
+function meaningTF(term: LexiconEntry, terms: LexiconEntry[]): TrueFalseQuestion {
+  if (Math.random() > 0.5) {
+    return {
+      kind: "tf",
+      statement: `Is it true that “${term.term}” means ${lc(term.plain)}?`,
+      correct: "True",
+      explanation: `Correct — ${term.term} means ${lc(term.plain)}. ${term.meaning}`,
+    };
+  }
+  const other =
+    terms.filter((t) => t.term !== term.term && t.plain !== term.plain).sort(rnd)[0] ?? term;
+  return {
+    kind: "tf",
+    statement: `Is it true that “${term.term}” means ${lc(other.plain)}?`,
+    correct: "False",
+    explanation: `Not quite — that describes ${other.term}. ${term.term} means ${lc(term.plain)}: ${term.meaning}`,
+  };
+}
+
+function generateQuestions(terms: LexiconEntry[], count = 10, advanced = true): Question[] {
+  const choiceQs = [...terms].sort(rnd).map((t) => choiceFromTerm(t, terms));
+  if (!advanced) return choiceQs.slice(0, count);
+
+  const poolNames = new Set(terms.map((t) => t.term));
+  const curatedTF: TrueFalseQuestion[] = USAGE_TF.filter(
+    (q) => q.terms.length === 0 || q.terms.some((n) => poolNames.has(n)),
+  )
+    .sort(rnd)
+    .map((q) => ({
+      kind: "tf",
+      statement: q.statement,
+      correct: q.answer,
+      explanation: q.explanation,
+    }));
+  const autoTF = [...terms].sort(rnd).map((t) => meaningTF(t, terms));
+
+  // Aim for roughly half true/false (curated usage first, then auto-generated),
+  // the rest multiple-choice, then shuffle the blend.
+  const tfTarget = Math.ceil(count / 2);
+  const tf = [...curatedTF, ...autoTF].slice(0, tfTarget);
+  const choice = choiceQs.slice(0, Math.max(0, count - tf.length));
+  return [...tf, ...choice].sort(rnd).slice(0, count);
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
@@ -44,6 +112,7 @@ export function TrainingQuiz({ terms: LEXICON_TERMS, categories: CATEGORIES }: T
   // Start screen state
   const [selectedCategories, setSelectedCategories] = useState<Set<string>>(new Set(CATEGORIES));
   const [founder, setFounder] = useState<"Founder 55" | "Founder 88">("Founder 55");
+  const [advanced, setAdvanced] = useState(true);
 
   // Quiz state
   const [screen, setScreen] = useState<Screen>("start");
@@ -85,7 +154,7 @@ export function TrainingQuiz({ terms: LEXICON_TERMS, categories: CATEGORIES }: T
   const beginSession = () => {
     const pool = LEXICON_TERMS.filter((t) => selectedCategories.has(t.category));
     if (pool.length < 2) return; // not enough terms
-    const qs = generateQuestions(pool, Math.min(10, pool.length));
+    const qs = generateQuestions(pool, Math.min(10, pool.length), advanced);
     setQuestions(qs);
     setCurrentIdx(0);
     setScore(0);
@@ -255,6 +324,38 @@ export function TrainingQuiz({ terms: LEXICON_TERMS, categories: CATEGORIES }: T
               <p className="mt-2 text-xs text-muted">
                 {LEXICON_TERMS.filter((t) => selectedCategories.has(t.category)).length} terms selected
               </p>
+            </div>
+
+            {/* Difficulty */}
+            <div>
+              <h2 className="text-xs font-semibold uppercase tracking-wider text-muted mb-3">Difficulty</h2>
+              <div className="flex gap-2">
+                {[
+                  { key: false, label: "Standard", sub: "Definitions" },
+                  { key: true, label: "Advanced", sub: "Usage & true/false" },
+                ].map((opt) => (
+                  <button
+                    key={String(opt.key)}
+                    onClick={() => setAdvanced(opt.key)}
+                    className={[
+                      "flex-1 rounded-xl border px-4 py-3 text-left transition-all",
+                      advanced === opt.key
+                        ? "border-gold/60 bg-gold/10"
+                        : "border-border bg-panel hover:border-gold/30",
+                    ].join(" ")}
+                  >
+                    <span
+                      className={[
+                        "block text-sm font-semibold",
+                        advanced === opt.key ? "text-gold" : "text-fg",
+                      ].join(" ")}
+                    >
+                      {opt.label}
+                    </span>
+                    <span className="block text-xs text-subtle">{opt.sub}</span>
+                  </button>
+                ))}
+              </div>
             </div>
 
             {/* Begin button */}
@@ -440,31 +541,34 @@ export function TrainingQuiz({ terms: LEXICON_TERMS, categories: CATEGORIES }: T
           {/* Prompt */}
           <div>
             <p className="text-xs font-semibold uppercase tracking-wider text-muted mb-3">
-              {currentQuestion.mode === "a" ? "What does this term mean?" : "Name this term"}
+              {currentQuestion.kind === "tf" ? "True or false?" : currentQuestion.promptLabel}
             </p>
             <p
               className={[
                 "text-2xl font-bold leading-snug",
-                currentQuestion.mode === "a" ? "text-gold" : "text-fg",
+                currentQuestion.kind === "choice" && currentQuestion.promptLabel === "What does this term mean?"
+                  ? "text-gold"
+                  : "text-fg",
               ].join(" ")}
             >
-              {currentQuestion.mode === "a" ? currentQuestion.term.term : currentQuestion.term.plain}
+              {currentQuestion.kind === "tf" ? currentQuestion.statement : currentQuestion.prompt}
             </p>
           </div>
 
-          {/* Options */}
-          <div className="flex flex-col gap-2">
-            {currentQuestion.options.map((opt) => {
+          {/* Answer options — choices for choice questions, True/False for tf */}
+          <div className={currentQuestion.kind === "tf" ? "flex gap-2" : "flex flex-col gap-2"}>
+            {(currentQuestion.kind === "tf" ? ["True", "False"] : currentQuestion.options).map((opt) => {
               const isCorrect = opt === currentQuestion.correct;
               const isSelected = opt === selected;
-              let optClass = "w-full rounded-xl border border-border bg-panel px-4 py-3 text-left text-sm text-fg hover:border-gold/40 hover:bg-panel-2 transition-all";
+              const wide = currentQuestion.kind === "tf" ? "flex-1 text-center font-semibold" : "text-left";
+              let optClass = `w-full rounded-xl border border-border bg-panel px-4 py-3 ${wide} text-sm text-fg hover:border-gold/40 hover:bg-panel-2 transition-all`;
               if (answered) {
                 if (isCorrect) {
-                  optClass = "w-full rounded-xl border border-gold bg-gold/10 px-4 py-3 text-left text-sm text-gold transition-all";
+                  optClass = `w-full rounded-xl border border-gold bg-gold/10 px-4 py-3 ${wide} text-sm text-gold transition-all`;
                 } else if (isSelected && !isCorrect) {
-                  optClass = "w-full rounded-xl border border-red-500/60 bg-red-500/10 px-4 py-3 text-left text-sm text-red-400 transition-all";
+                  optClass = `w-full rounded-xl border border-red-500/60 bg-red-500/10 px-4 py-3 ${wide} text-sm text-red-400 transition-all`;
                 } else {
-                  optClass = "w-full rounded-xl border border-border bg-panel px-4 py-3 text-left text-sm text-muted transition-all opacity-60";
+                  optClass = `w-full rounded-xl border border-border bg-panel px-4 py-3 ${wide} text-sm text-muted transition-all opacity-60`;
                 }
               }
               return (
@@ -479,6 +583,23 @@ export function TrainingQuiz({ terms: LEXICON_TERMS, categories: CATEGORIES }: T
               );
             })}
           </div>
+
+          {/* Explanation — the teaching moment, shown after answering */}
+          {answered && (
+            <div
+              className={[
+                "rounded-xl border px-4 py-3 text-sm leading-relaxed",
+                selected === currentQuestion.correct
+                  ? "border-gold/40 bg-gold/5 text-muted"
+                  : "border-border bg-panel-2 text-muted",
+              ].join(" ")}
+            >
+              <span className={selected === currentQuestion.correct ? "font-semibold text-gold" : "font-semibold text-red-400"}>
+                {selected === currentQuestion.correct ? "Correct. " : "Not quite. "}
+              </span>
+              {currentQuestion.explanation}
+            </div>
+          )}
 
           {/* XP flash */}
           {xpFlash && (
