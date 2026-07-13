@@ -76,7 +76,7 @@ function meaningTF(term: LexiconEntry, terms: LexiconEntry[]): TrueFalseQuestion
   };
 }
 
-function generateQuestions(terms: LexiconEntry[], count = 10, advanced = true): Question[] {
+function generateQuestions(terms: LexiconEntry[], count = 20, advanced = true): Question[] {
   const choiceQs = [...terms].sort(rnd).map((t) => choiceFromTerm(t, terms));
   if (!advanced) return choiceQs.slice(0, count);
 
@@ -154,7 +154,9 @@ export function TrainingQuiz({ terms: LEXICON_TERMS, categories: CATEGORIES }: T
   const beginSession = () => {
     const pool = LEXICON_TERMS.filter((t) => selectedCategories.has(t.category));
     if (pool.length < 2) return; // not enough terms
-    const qs = generateQuestions(pool, Math.min(10, pool.length), advanced);
+    // Up to 20 questions per round, drawn randomly from the bank (the generator
+    // returns fewer only when the selected pool can't supply that many).
+    const qs = generateQuestions(pool, 20, advanced);
     setQuestions(qs);
     setCurrentIdx(0);
     setScore(0);
