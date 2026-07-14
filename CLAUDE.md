@@ -113,3 +113,16 @@ unconfigured, e.g. local dev).
 - The "Add a Term" panel on the Training start screen already writes new
   submissions *to* Notion (`/api/training/suggest`) — combined with this sync, a
   submitted term round-trips into the Lexicon view/quiz on the next daily pass.
+
+## Cappo executive report (pull-ready for ALLIE)
+
+`lib/cappoReportScheduler.ts`, started from `instrumentation.ts` alongside the lexicon sync —
+same in-process hourly-check pattern (state tracked in Postgres' `cappo_reports`, survives
+restarts), but regenerates every ≥6h instead of ≥24h. Each run calls `runCappoAgent()` with a
+fixed executive-status prompt and caches the result.
+
+- **Pull the cached report**: `GET /api/agent/report` with header `x-agent-key:
+  $AGENT_API_KEY` (same auth as `POST /api/agent`) — returns instantly, never triggers a live
+  agent call. This is what ALLIE (`rmg-ai`'s `tools_cappo.py`) reads instead of delegating live
+  work just to check AMG's status.
+- Distinct from `POST /api/agent`, which stays for live, on-demand task delegation.

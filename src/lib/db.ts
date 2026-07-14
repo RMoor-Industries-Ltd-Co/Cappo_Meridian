@@ -90,6 +90,13 @@ async function ensureSchema(p: Pool): Promise<void> {
           total_count   INT NOT NULL DEFAULT 0,
           error         TEXT
         );
+
+        CREATE TABLE IF NOT EXISTS cappo_reports (
+          id            BIGSERIAL PRIMARY KEY,
+          report_text   TEXT,
+          generated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+          error         TEXT
+        );
       `)
       .then(() => undefined)
       .catch((e) => {
@@ -424,6 +431,28 @@ export async function getLastLexiconSync(): Promise<{ ran_at: string; error: str
   if (!p) return null;
   const { rows } = await p.query<{ ran_at: string; error: string | null }>(
     `SELECT ran_at::text, error FROM lexicon_sync_runs ORDER BY id DESC LIMIT 1`,
+  );
+  return rows[0] ?? null;
+}
+
+// ── Cappo executive reports (cappoReportScheduler.ts) ────────────────
+// Same shape as lexicon_sync_runs: append-only run log, latest row = current report.
+export async function saveCappoReport(reportText: string | null, error?: string): Promise<void> {
+  const p = await db();
+  if (!p) return;
+  await p.query(
+    `INSERT INTO cappo_reports (report_text, error) VALUES ($1, $2)`,
+    [reportText, error ?? null],
+  );
+}
+
+export async function getLastCappoReport(): Promise<
+  { report_text: string | null; generated_at: string; error: string | null } | null
+> {
+  const p = await db();
+  if (!p) return null;
+  const { rows } = await p.query<{ report_text: string | null; generated_at: string; error: string | null }>(
+    `SELECT report_text, generated_at::text, error FROM cappo_reports ORDER BY id DESC LIMIT 1`,
   );
   return rows[0] ?? null;
 }
