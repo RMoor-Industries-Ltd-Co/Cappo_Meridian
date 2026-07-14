@@ -1,6 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { isAgentAuthorized } from "@/lib/agentAuth";
-import { getLastCappoReport } from "@/lib/db";
+import { getLastSuccessfulCappoReport } from "@/lib/db";
 
 export const runtime = "nodejs";
 
@@ -13,7 +13,7 @@ export async function GET(req: NextRequest) {
   if (!isAgentAuthorized(req.headers.get("x-agent-key"))) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
-  const last = await getLastCappoReport();
+  const last = await getLastSuccessfulCappoReport();
   if (!last) {
     return NextResponse.json({ report_text: null, generated_at: null, error: "no report generated yet" });
   }
