@@ -19,7 +19,11 @@ const protect = auth((req) => {
     pathname.startsWith("/icon") ||
     pathname.startsWith("/apple-icon") ||
     pathname === "/api/health" ||
-    pathname === "/api/agent" || // keyed machine-to-machine (ALLIE → Cappo); own auth
+    pathname.startsWith("/api/agent") || // keyed machine-to-machine (ALLIE → Cappo); own auth.
+    // startsWith, not ===, so /api/agent/report is covered too — an exact match here
+    // was a real bug: it silently redirected keyed M2M calls to /signin instead of
+    // ever reaching the route's own x-agent-key check.
+    pathname === "/api/lexicon/sync" || // same keyed machine-to-machine auth pattern
     /\.[a-zA-Z0-9]+$/.test(pathname); // static files in /public (logo .png/.svg, etc.)
 
   if (!req.auth && !isPublic) {

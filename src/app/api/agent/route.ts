@@ -1,5 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server";
-import { env } from "@/lib/env";
+import { isAgentAuthorized } from "@/lib/agentAuth";
 import { runCappoAgent } from "@/lib/agent";
 
 export const runtime = "nodejs";
@@ -11,8 +11,7 @@ export const maxDuration = 120;
  * Auth here is the key — separate from the human Google login that gates the dashboard.
  */
 export async function POST(req: NextRequest) {
-  const key = req.headers.get("x-agent-key");
-  if (!env.AGENT_API_KEY || key !== env.AGENT_API_KEY) {
+  if (!isAgentAuthorized(req.headers.get("x-agent-key"))) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
   let body: { task?: string } = {};
