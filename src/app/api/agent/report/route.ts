@@ -1,5 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server";
-import { env } from "@/lib/env";
+import { isAgentAuthorized } from "@/lib/agentAuth";
 import { getLastCappoReport } from "@/lib/db";
 
 export const runtime = "nodejs";
@@ -10,8 +10,7 @@ export const runtime = "nodejs";
  * which does live task delegation. Same auth as that endpoint (shared AGENT_API_KEY).
  */
 export async function GET(req: NextRequest) {
-  const key = req.headers.get("x-agent-key");
-  if (!env.AGENT_API_KEY || key !== env.AGENT_API_KEY) {
+  if (!isAgentAuthorized(req.headers.get("x-agent-key"))) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
   const last = await getLastCappoReport();
