@@ -456,3 +456,18 @@ export async function getLastCappoReport(): Promise<
   );
   return rows[0] ?? null;
 }
+
+/** Distinct from getLastCappoReport(), which the scheduler uses to gate regeneration off the
+ * newest row (success or failure). This is for the pull endpoint: a transient outage after the
+ * scheduler's cache table already holds a good report shouldn't make ALLIE see a null report --
+ * she should keep getting the last one that actually generated until a new one succeeds. */
+export async function getLastSuccessfulCappoReport(): Promise<
+  { report_text: string | null; generated_at: string; error: string | null } | null
+> {
+  const p = await db();
+  if (!p) return null;
+  const { rows } = await p.query<{ report_text: string | null; generated_at: string; error: string | null }>(
+    `SELECT report_text, generated_at::text, error FROM cappo_reports WHERE report_text IS NOT NULL ORDER BY id DESC LIMIT 1`,
+  );
+  return rows[0] ?? null;
+}
