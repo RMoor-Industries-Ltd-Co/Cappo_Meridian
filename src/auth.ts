@@ -1,13 +1,15 @@
 import NextAuth from "next-auth";
 import Google from "next-auth/providers/google";
 import { env } from "@/lib/env";
+import { FOUNDER_EMAILS } from "@/lib/founders";
 
 /**
  * App authentication for Cappo_Meridian.
  *
  * Access is granted to any of:
  *   (a) Verified Google Workspace accounts on GOOGLE_WORKSPACE_DOMAIN, OR
- *   (b) Email addresses explicitly listed in PARTNER_EMAILS (comma-separated).
+ *   (b) Email addresses listed in PARTNER_EMAILS (comma-separated), OR
+ *   (c) The two founder emails (FOUNDER_55_EMAIL / FOUNDER_88_EMAIL).
  *
  * The same Google OAuth client is reused for the Drive/Gmail connectors;
  * register both redirect URIs on it:
@@ -15,9 +17,8 @@ import { env } from "@/lib/env";
  *   - /api/connectors/google/callback     (connector authorization)
  */
 
-const partnerEmails = new Set(
-  (env.PARTNER_EMAILS ?? "")
-    .split(",")
+const allowedEmails = new Set(
+  [...(env.PARTNER_EMAILS ?? "").split(","), ...FOUNDER_EMAILS]
     .map((e) => e.trim().toLowerCase())
     .filter(Boolean),
 );
@@ -47,8 +48,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       const verified = profile?.email_verified === true;
       if (!verified || !email) return false;
 
-      // Always allow explicitly listed partner emails
-      if (partnerEmails.has(email)) return true;
+      // Always allow explicitly listed partner + founder emails
+      if (allowedEmails.has(email)) return true;
 
       // Allow verified accounts on the AMG Workspace domain
       const domain = env.GOOGLE_WORKSPACE_DOMAIN;
