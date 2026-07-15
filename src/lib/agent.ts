@@ -41,7 +41,7 @@ function notionPageTitle(page: Record<string, unknown>): string {
 
 const SYSTEM = `You are Cappo, the AI operations engine for Apex Meridian Group (AMG). You work UNDER ALLIE (Rahm's Director of Operations): she delegates AMG tasks to you, and you EXECUTE them in AMG's systems, then report back.
 
-You can: read and manage AMG's ClickUp (AMG space only); organise the AMG mailbox (Gmail: search, label, archive, mark-read, trash, draft, send); search and browse AMG's Google Drive; search the AMG Notion workspace; fetch live web pages for research; and check the upcoming AMG calendar.
+You can: read and manage AMG's ClickUp (AMG space only); organise the AMG mailbox (Gmail: search, label, archive, mark-read, trash, draft, send); search and browse AMG's Google Drive; search the AMG Notion workspace; fetch live web pages for research; check the upcoming AMG calendar; and pull Vale's (HVN Havenry's concierge) latest showroom activity report for HVN<->AMG business coordination.
 
 Use your tools to pull REAL data and make exactly the changes requested — never invent names, ids, statuses, or dates. When finished, give a tight summary of what you found and what you changed, including ids.`;
 
@@ -231,6 +231,13 @@ const TOOLS = [
       required: ["title", "content"],
     },
   },
+  // ── Vale (HVN Havenry) ───────────────────────────────────────────────
+  {
+    name: "vale_get_report",
+    description:
+      "Pull Vale's latest cached HVN Havenry showroom activity report -- already generated on a schedule, instant to read. For HVN<->AMG business coordination: what's trending in the showroom, which products are getting attention. Aggregate data only, never a specific visitor's conversation.",
+    input_schema: { type: "object", properties: {} },
+  },
   // ── Web ───────────────────────────────────────────────────────────────
   {
     name: "web_fetch",
@@ -369,6 +376,22 @@ async function runTool(name: string, input: any): Promise<string> {
     return `Notion page created: "${input.title}" — ${(page as Record<string, unknown>).url ?? page.id}`;
   }
   // ── Web ───────────────────────────────────────────────────────────────
+  if (name === "vale_get_report") {
+    if (!env.VALE_REPORT_URL || !env.VALE_AGENT_KEY) return "Vale's cached report isn't connected yet.";
+    try {
+      const res = await fetch(env.VALE_REPORT_URL, {
+        headers: { "x-agent-key": env.VALE_AGENT_KEY },
+        signal: AbortSignal.timeout(15_000),
+      });
+      if (res.status === 401) return "Vale rejected the call (auth key mismatch).";
+      if (!res.ok) return `HTTP ${res.status} ${res.statusText} from Vale`;
+      const data = (await res.json()) as { reportText?: string | null; report_text?: string | null };
+      return data.reportText ?? data.report_text ?? "(no report cached yet)";
+    } catch (e) {
+      return `Vale report pull failed: ${e instanceof Error ? e.message : String(e)}`;
+    }
+  }
+
   if (name === "web_fetch") {
     try {
       const res = await fetch(input.url, {
@@ -409,6 +432,7 @@ Your capabilities:
 • Notion — search pages and create new captures/notes
 • Calendar — view upcoming AMG events
 • Web — fetch live pages for research (company sites, news, pricing, etc.)
+• Vale — pull HVN Havenry's concierge's latest showroom activity report for HVN<->AMG business coordination
 
 When the partner asks you to DO something — create a task, draft an email, find a file, research a company — use your tools and confirm exactly what you did with ids/counts. For email, always gmail_search first to get message ids before acting on them. When they're just thinking or asking questions, help them think. Be concise and direct. Never invent task names, ids, statuses, or dates — look them up first.`;
 
