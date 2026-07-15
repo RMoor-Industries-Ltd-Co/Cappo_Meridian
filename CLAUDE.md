@@ -126,3 +126,12 @@ fixed executive-status prompt and caches the result.
   agent call. This is what ALLIE (`rmg-ai`'s `tools_cappo.py`) reads instead of delegating live
   work just to check AMG's status.
 - Distinct from `POST /api/agent`, which stays for live, on-demand task delegation.
+
+## Vale (HVN Havenry's concierge) — read access for HVN<->AMG coordination
+
+Cappo can pull Vale's cached HVN showroom activity report directly (`vale_get_report` tool,
+`src/lib/agent.ts`) — `GET`-ing hvnhavenry-com's `/api/agent/report` with `VALE_AGENT_KEY`
+(Vale's own M2M secret, distinct from Cappo's `AGENT_API_KEY`). Aggregate showroom-interest
+data only (interaction counts by prompt type, top-asked-about products) — never a specific
+visitor's conversation. Available in both the ALLIE-delegation tool loop and the dashboard
+chat.

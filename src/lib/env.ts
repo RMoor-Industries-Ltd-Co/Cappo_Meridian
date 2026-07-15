@@ -61,6 +61,13 @@ const schema = z.object({
   // Cappo's /api/agent server-to-server, separate from the human Google login.
   AGENT_API_KEY: z.string().optional(),
 
+  // Vale — HVN Havenry's public-facing concierge. Cappo pulls her cached HVN<->AMG
+  // activity report directly (see agent.ts's vale_get_report tool) for HVN<->AMG
+  // business coordination. Separate key from AGENT_API_KEY above, since it's Vale's
+  // AGENT_API_KEY on the hvnhavenry-com side, not Cappo's own.
+  VALE_REPORT_URL: z.string().optional(),
+  VALE_AGENT_KEY: z.string().optional(),
+
   // Secret-at-rest key — encrypts Google OAuth tokens stored in Postgres
   // (AES-256-GCM). Any passphrase works (SHA-256 derived). Set in production.
   SECRET_ENCRYPTION_KEY: z.string().optional(),
