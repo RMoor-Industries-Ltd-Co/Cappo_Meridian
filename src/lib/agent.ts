@@ -16,8 +16,14 @@ import {
   gmailSend,
 } from "@/lib/connectors/gmail";
 import { driveList, driveSearch } from "@/lib/connectors/driveFs";
+import { addInitiative, githubReady, type InitiativeRow } from "@/lib/githubApp";
 
 const AI_MODEL = "claude-sonnet-4-6";
+
+// The chain of command, stated explicitly so Cappo actually knows who's who instead of
+// inferring it -- Rahm reported Cappo "doesn't know who ALLIE or ALLEN is" despite the
+// old prompt naming ALLIE once in passing. Shared between both system prompts below.
+const _CHAIN_OF_COMMAND = `Chain of command: Rahm (owner) -> ALLEN (his Chief of Staff, lives at ALLEN-I-VERSE, rmg-ai) -> ALLIE (ALLEN's Director of Operations, runs the RMG/RMI business worlds) -> you, Cappo (AMG's operations engine, one tier under ALLIE). ALLIE delegates AMG tasks to you via a keyed server call and you execute them in AMG's own systems, then report back to her. Rahm may also talk to you directly in this dashboard -- either way, you're the AMG specialist in a larger PIAAR network: Vale is HVN Havenry's concierge (you can pull her cached showroom report for HVN<->AMG coordination), Anpu/Thoth are AXIS's trading-oversight agents, and Constance is Connection Circle's. You never touch those other domains directly except pulling Vale's report.`;
 
 function getAnthropic(): Anthropic | null {
   const key = env.ANTHROPIC_API_KEY || env.CLAUDE_API_KEY;
@@ -39,9 +45,11 @@ function notionPageTitle(page: Record<string, unknown>): string {
   return "Untitled";
 }
 
-const SYSTEM = `You are Cappo, the AI operations engine for Apex Meridian Group (AMG). You work UNDER ALLIE (Rahm's Director of Operations): she delegates AMG tasks to you, and you EXECUTE them in AMG's systems, then report back.
+const SYSTEM = `You are Cappo, the AI operations engine for Apex Meridian Group (AMG).
 
-You can: read and manage AMG's ClickUp (AMG space only); organise the AMG mailbox (Gmail: search, label, archive, mark-read, trash, draft, send); search and browse AMG's Google Drive; search the AMG Notion workspace; fetch live web pages for research; check the upcoming AMG calendar; and pull Vale's (HVN Havenry's concierge) latest showroom activity report for HVN<->AMG business coordination.
+${_CHAIN_OF_COMMAND}
+
+You can: read and manage AMG's ClickUp (AMG space only); organise the AMG mailbox (Gmail: search, label, archive, mark-read, trash, draft, send); search and browse AMG's Google Drive; search the AMG Notion workspace; fetch live web pages for research; check the upcoming AMG calendar; pull Vale's (HVN Havenry's concierge) latest showroom activity report for HVN<->AMG business coordination; and add a new initiative to rmg-piaar-system's INITIATIVES.md registry when Rahm or ALLIE asks you to track new PIAAR-wide work.
 
 Use your tools to pull REAL data and make exactly the changes requested — never invent names, ids, statuses, or dates. When finished, give a tight summary of what you found and what you changed, including ids.`;
 
@@ -238,6 +246,24 @@ const TOOLS = [
       "Pull Vale's latest cached HVN Havenry showroom activity report -- already generated on a schedule, instant to read. For HVN<->AMG business coordination: what's trending in the showroom, which products are getting attention. Aggregate data only, never a specific visitor's conversation.",
     input_schema: { type: "object", properties: {} },
   },
+  // ── PIAAR initiatives (rmg-piaar-system) ────────────────────────────
+  {
+    name: "add_initiative",
+    description:
+      "Add a new row to rmg-piaar-system's INITIATIVES.md registry -- the single tracked list of in-flight PIAAR-wide work. This is the ONLY file Cappo can write to; never claim to touch any code repo. Use when Rahm or ALLIE asks you to track a new piece of cross-project work.",
+    input_schema: {
+      type: "object",
+      properties: {
+        initiative: { type: "string", description: "short name of the initiative" },
+        repos: { type: "string", description: "repo(s) touched, e.g. 'Cappo_Meridian, rmg-ai'" },
+        branch: { type: "string", description: "branch name if known, else 'TBD'" },
+        status: { type: "string", description: "e.g. 'Planned — not started', 'In progress', 'Blocked', 'Done'" },
+        owner: { type: "string", description: "who's driving this — usually 'Cappo' or a named person" },
+        goal: { type: "string", description: "one-line goal / why this matters" },
+      },
+      required: ["initiative", "repos", "goal"],
+    },
+  },
   // ── Web ───────────────────────────────────────────────────────────────
   {
     name: "web_fetch",
@@ -392,6 +418,26 @@ async function runTool(name: string, input: any): Promise<string> {
     }
   }
 
+  if (name === "add_initiative") {
+    if (!githubReady()) return "Adding initiatives isn't connected yet (GitHub App credentials missing).";
+    const row: InitiativeRow = {
+      initiative: String(input.initiative ?? "").trim(),
+      repos: String(input.repos ?? "").trim(),
+      branch: String(input.branch ?? "TBD").trim() || "TBD",
+      status: String(input.status ?? "Planned — not started").trim() || "Planned — not started",
+      owner: String(input.owner ?? "Cappo").trim() || "Cappo",
+      goal: String(input.goal ?? "").trim(),
+    };
+    if (!row.initiative || !row.repos || !row.goal) {
+      return "add_initiative needs at least initiative, repos, and goal.";
+    }
+    try {
+      return await addInitiative(row);
+    } catch (e) {
+      return `Could not add initiative: ${e instanceof Error ? e.message : String(e)}`;
+    }
+  }
+
   if (name === "web_fetch") {
     try {
       const res = await fetch(input.url, {
@@ -423,6 +469,8 @@ async function runTool(name: string, input: any): Promise<string> {
 
 const SYSTEM_DASH = `You are Cappo, the AI operations engine for Apex Meridian Group (AMG), talking directly with an AMG partner in the Cappo dashboard.
 
+${_CHAIN_OF_COMMAND}
+
 You have full access to AMG's operational systems and will act on requests automatically — no need for the partner to enable a special mode.
 
 Your capabilities:
@@ -433,6 +481,7 @@ Your capabilities:
 • Calendar — view upcoming AMG events
 • Web — fetch live pages for research (company sites, news, pricing, etc.)
 • Vale — pull HVN Havenry's concierge's latest showroom activity report for HVN<->AMG business coordination
+• Initiatives — add a new row to rmg-piaar-system's INITIATIVES.md registry to track new PIAAR-wide work
 
 When the partner asks you to DO something — create a task, draft an email, find a file, research a company — use your tools and confirm exactly what you did with ids/counts. For email, always gmail_search first to get message ids before acting on them. When they're just thinking or asking questions, help them think. Be concise and direct. Never invent task names, ids, statuses, or dates — look them up first.`;
 
