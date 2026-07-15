@@ -135,3 +135,24 @@ Cappo can pull Vale's cached HVN showroom activity report directly (`vale_get_re
 data only (interaction counts by prompt type, top-asked-about products) — never a specific
 visitor's conversation. Available in both the ALLIE-delegation tool loop and the dashboard
 chat.
+
+## Chain of command (both system prompts state this explicitly)
+
+Rahm → ALLEN (Chief of Staff, `rmg-ai`) → ALLIE (ALLEN's Director of Operations, runs
+RMG/RMI) → Cappo (AMG's operations engine, one tier under ALLIE). Both `SYSTEM` (the
+ALLIE-delegation path) and `SYSTEM_DASH` (the dashboard chat Rahm talks to directly) share
+this via the `_CHAIN_OF_COMMAND` constant in `src/lib/agent.ts` — Cappo previously only
+named ALLIE once in passing and never mentioned ALLEN at all, so he couldn't correctly
+answer "who do you report to."
+
+## PIAAR initiatives — Cappo's one permitted GitHub write
+
+`add_initiative` (`src/lib/agent.ts` + `src/lib/githubApp.ts`) appends a new row to
+`rmg-piaar-system`'s `docs/INITIATIVES.md` registry — the cross-project tracked-work list.
+This is the **only** file Cappo can write to; there is no general GitHub write capability
+here. Uses the same `allen-piaar-control-bot` GitHub App identity `rmg-ai`'s ALLEN already
+uses (RS256 JWT → installation access token, built with `node:crypto`, no `jsonwebtoken`
+dependency) — the restriction to `INITIATIVES.md` is enforced at the tool layer, mirroring
+`rmg-ai`'s own `tools_github.py` (`CONTENTS_WRITE_REPOS` allowlist), since the App itself is
+shared org-wide. Requires `GITHUB_APP_ID`/`GITHUB_APP_INSTALLATION_ID`/`GITHUB_APP_PRIVATE_KEY`
+copied from `allen-i-verse`'s Doppler project — see `.env.example`.

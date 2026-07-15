@@ -72,6 +72,15 @@ const schema = z.object({
   VALE_REPORT_URL: z.string().optional(),
   VALE_AGENT_KEY: z.string().optional(),
 
+  // GitHub App identity for Cappo's ONE permitted write: appending a row to
+  // rmg-piaar-system's docs/INITIATIVES.md (add_initiative tool, src/lib/githubApp.ts).
+  // Reuses the same allen-piaar-control-bot App identity rmg-ai's ALLEN uses (already
+  // installed org-wide) -- the restriction to that one file lives at the tool layer here,
+  // same pattern as ALLEN's own tools_github.py CONTENTS_WRITE_REPOS allowlist.
+  GITHUB_APP_ID: z.string().optional(),
+  GITHUB_APP_INSTALLATION_ID: z.string().optional(),
+  GITHUB_APP_PRIVATE_KEY: z.string().optional(),
+
   // Secret-at-rest key — encrypts Google OAuth tokens stored in Postgres
   // (AES-256-GCM). Any passphrase works (SHA-256 derived). Set in production.
   SECRET_ENCRYPTION_KEY: z.string().optional(),
