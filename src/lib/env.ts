@@ -13,6 +13,10 @@ const schema = z.object({
   GOOGLE_WORKSPACE_DOMAIN: z.string().default("apex-meridian-group.com"),
   // Comma-separated personal emails always allowed to sign in (bypasses Workspace domain gate)
   PARTNER_EMAILS: z.string().optional(),
+  // The two founders' login emails — always allowed to sign in, and mapped to
+  // their founder identity (see lib/founders.ts). Any email domain is fine.
+  FOUNDER_55_EMAIL: z.string().optional(),
+  FOUNDER_88_EMAIL: z.string().optional(),
 
   // ClickUp — personal API token (https://app.clickup.com/settings/apps)
   CLICKUP_API_TOKEN: z.string().optional(),
