@@ -13,6 +13,7 @@ import {
   HardDrive,
   BookOpen,
   Video,
+  Landmark,
   type LucideIcon,
 } from "lucide-react";
 
@@ -36,6 +37,7 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/inventory", label: "Inventory", icon: Boxes, blurb: "Stock levels, SKUs, and supply tracking." },
   { href: "/contact-center", label: "Contact Center", icon: PhoneCall, blurb: "Outbound call console for suppliers, wholesalers & contractors — scripts, capture, outcomes." },
   { href: "/budget", label: "Budget", icon: Wallet, blurb: "Spend, forecasts, and financial health." },
+  { href: "/grantops", label: "GrantOps", icon: Landmark, blurb: "Funding Command Center — research, score, and prepare grant & funding applications with CAPPO governance and ALLIE prep. Human approval before any submission." },
   { href: "/operations", label: "Operations", icon: BookText, blurb: "Live AMG structure, current work swim lanes, and meeting notes." },
   { href: "/drive", label: "Drive", icon: HardDrive, blurb: "Browse and manage the AMG Google Drive — files & folders." },
   { href: "/legal", label: "Legal", icon: Scale, blurb: "Contracts, compliance, and entity documents." },
