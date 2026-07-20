@@ -265,6 +265,7 @@ export function createApplication(oppId: string): GrantApplication | undefined {
     submittedDate: null,
     confirmationNumber: null,
     followUpDate: null,
+    automationFiredAt: null,
     createdAt: now,
     updatedAt: now,
   };

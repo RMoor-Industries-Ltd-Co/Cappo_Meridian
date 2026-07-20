@@ -16,6 +16,7 @@ import {
   createApplication,
   createDocument,
   createOpportunity,
+  getOpportunity,
   recordCappoDecision,
   recordSubmission,
   toggleChecklistItem,
@@ -24,6 +25,7 @@ import {
   updateEntity,
   updateOpportunity,
 } from "./store";
+import { createDeadlineTasksForApplication, fireGrantApprovalWebhook } from "./automation";
 import type {
   AwardType,
   CappoDecision,
@@ -104,6 +106,24 @@ export async function cappoDecisionAction(form: FormData) {
   const decision = str(form.get("decision")) as CappoDecision | undefined;
   if (!id || !decision) return;
   recordCappoDecision(id, decision, str(form.get("cappoNotes")));
+
+  // Approval greenlight → scaffold the application automatically. Auto-open the
+  // workspace (checklist), create ClickUp deadline tasks, and fire the Make.com
+  // webhook that builds the Drive folder + draft-doc workspace. Guarded by
+  // automationFiredAt so a re-approval never double-scaffolds. All best-effort:
+  // any integration being unconfigured/down never blocks the decision itself.
+  if (decision === "approved_to_apply") {
+    const opp = getOpportunity(id);
+    const app = createApplication(id);
+    if (opp && app && !app.automationFiredAt) {
+      updateApplication(app.id, { automationFiredAt: new Date().toISOString() });
+      await createDeadlineTasksForApplication(opp);
+      await fireGrantApprovalWebhook(opp, app);
+      revalidatePath(`${B}/applications`);
+      revalidatePath(`${B}/applications/${app.id}`);
+    }
+  }
+
   revalidatePath(`${B}/review`);
   revalidatePath(`${B}/opportunities/${id}`);
   revalidatePath(B);

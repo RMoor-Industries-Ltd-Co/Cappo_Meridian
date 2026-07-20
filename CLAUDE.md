@@ -145,6 +145,39 @@ this via the `_CHAIN_OF_COMMAND` constant in `src/lib/agent.ts` — Cappo previo
 named ALLIE once in passing and never mentioned ALLEN at all, so he couldn't correctly
 answer "who do you report to."
 
+## GrantOps approval automation (Make.com + Google Drive)
+
+When a grant is **CAPPO-approved** (`cappoDecisionAction` → `approved_to_apply`,
+`src/lib/grantops/actions.ts`), Cappo auto-scaffolds the application instead of leaving
+it to manual setup:
+
+1. **Auto-opens the application workspace** (`createApplication`) so the internal
+   checklist (derived from `requiredDocuments`) exists immediately.
+2. **Creates ClickUp deadline tasks natively** (`createDeadlineTasksForApplication`,
+   `src/lib/grantops/automation.ts`) — one `Submit:` task due on the deadline plus a
+   `Gather:` task per required document, tagged `grantops`, via the existing
+   `clickupCreateTask`. (ClickUp stays in Cappo because Make has no ClickUp connection.)
+3. **Fires a Make.com webhook** (`MAKE_GRANTOPS_WEBHOOK_URL`) so a Make scenario creates
+   the **Drive folder + draft Google Docs** (the "draft workspace"), then calls back
+   `POST /api/grantops/automation/callback` (authed with `AGENT_API_KEY`, same
+   `x-agent-key` pattern as `/api/agent`) to link the folder URL onto the application
+   (`driveFolderUrl`).
+
+Everything is **best-effort / fire-and-forget**: any integration being unconfigured or
+down never blocks the approval. An `automationFiredAt` guard on the application prevents
+a re-approval from double-scaffolding; the Make scenario's search-or-create + the Drive
+folder itself are the durable records (Cappo's store is in-memory by design — see
+`grantops/store.ts:11`). Unset `MAKE_GRANTOPS_WEBHOOK_URL` → the webhook silently no-ops;
+the checklist + ClickUp tasks still run.
+
+**Make side:** an inactive scenario "GrantOps Approval → Drive workspace" is scaffolded
+(webhook → Google Drive create-folder → HTTP callback → iterator over `draftDocs` →
+Google Drive create-doc). To go live: in Make, bind the two Google Drive modules to a
+**Google Drive (`google-restricted`) connection** (the existing generic "google"
+connection isn't compatible with the Drive app), pick the parent folder
+(`GRANTOPS_DRIVE_PARENT_FOLDER_ID`), fill the `x-agent-key` header with `AGENT_API_KEY`,
+then activate. Set `MAKE_GRANTOPS_WEBHOOK_URL` in Cappo's environment to the webhook URL.
+
 ## PIAAR initiatives — Cappo's one permitted GitHub write
 
 `add_initiative` (`src/lib/agent.ts` + `src/lib/githubApp.ts`) appends a new row to

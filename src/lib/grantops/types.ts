@@ -196,6 +196,9 @@ export interface GrantApplication {
   followUpDate?: string | null;
   complianceRequirements?: string;
   notes?: string;
+  // Set once the CAPPO-approval automation (Make webhook + ClickUp deadline tasks)
+  // has fired for this application, so a re-approval never double-scaffolds it.
+  automationFiredAt?: string | null;
   createdAt: string;
   updatedAt: string;
 }
