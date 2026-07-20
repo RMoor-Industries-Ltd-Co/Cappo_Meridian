@@ -55,9 +55,13 @@ Rules:
 
 The AI module uses the **Anthropic API** (per-token, `ANTHROPIC_API_KEY`), **not** a
 Claude.ai Pro/Max subscription — those are separate products and a subscription cannot
-back an embedded app. One **shared AMG API key** (its own org/billing, separate from
-personal Claude.ai accounts) powers AI for all dashboard users; partners do not each
-need an AI account. Model: `claude-opus-4-8` (see [`src/lib/ai.ts`](src/lib/ai.ts)).
+back an embedded app. One **shared AMG API key** — Cappo_Meridian's own dedicated key,
+the `CAPPO` workspace/key in the "RMoor Industries Ltd Co." Anthropic Console org (login
+`rahmind.consulting@rmoorind.com`), not shared with any other PIAAR repo and distinct
+from any partner's personal Claude.ai account — powers AI for all dashboard users;
+partners do not each need an AI account. Model: `claude-opus-4-8` (see
+[`src/lib/ai.ts`](src/lib/ai.ts)). See `rmg-piaar-system/CLAUDE.md` for the full
+per-project key mapping.
 
 ## Multi-partner access
 
