@@ -4,27 +4,28 @@
  * When CAPPO approves an opportunity (approved_to_apply), Cappo:
  *   1. auto-opens the application workspace (checklist) — done in actions.ts,
  *   2. natively creates the ClickUp deadline tasks (createDeadlineTasksForApplication),
- *   3. fires a Make.com webhook (fireGrantApprovalWebhook) so Make creates the Drive
- *      folder + draft-doc workspace, then calls back to link the folder URL.
+ *   3. natively creates the Google Drive folder + draft-doc workspace
+ *      (createDriveWorkspace) using the app's already-connected Google account, and
+ *      links the folder URL onto the application.
  *
- * Everything here is BEST-EFFORT: an unconfigured integration or a transient outage
- * must never break the approval itself. The Drive folder + ClickUp tasks are the
- * durable source-of-truth records; Cappo's own store is a coordination surface (see
- * store.ts:11), so a fire-and-forget model fits the module's design.
+ * Everything here is BEST-EFFORT: an unconfigured/unauthorized integration or a
+ * transient outage must never break the approval itself. The Drive folder + ClickUp
+ * tasks are the durable source-of-truth records; Cappo's own store is a coordination
+ * surface (see store.ts:11).
  */
 
 import { env } from "@/lib/env";
 import { clickupCreateTask } from "@/lib/connectors/clickup";
-import { DOCUMENT_LABELS } from "./store";
-import { daysUntil, type FundingOpportunity, type GrantApplication } from "./types";
+import { driveCreateDoc, driveEnsureFolder, isNotConnected } from "@/lib/connectors/driveFs";
+import { DOCUMENT_LABELS, updateApplication } from "./store";
+import type { FundingOpportunity, GrantApplication } from "./types";
 
 /** ClickUp tag applied to every task this automation creates. */
 const GRANTOPS_TAG = "grantops";
 
 /**
- * The draft Google Docs Make should create inside the grant folder — the "draft
- * workspace." Ordered to mirror a real application's build sequence. Make iterates
- * this list; each entry becomes one blank Google Doc named `{label}`.
+ * The draft Google Docs created inside the grant folder — the "draft workspace."
+ * Ordered to mirror a real application's build sequence; each becomes one blank Doc.
  */
 const DRAFT_DOC_SECTIONS = [
   "Narrative",
@@ -36,81 +37,59 @@ const DRAFT_DOC_SECTIONS = [
   "Impact Statement",
 ] as const;
 
-export interface GrantApprovalPayload {
-  opportunityId: string;
-  applicationId: string;
-  opportunityName: string;
-  fundingOrganization: string;
-  applicantEntity: string;
-  deadline: string | null;
-  daysUntilDeadline: number | null;
-  fundingAmount: number | null;
-  applicationUrl: string | null;
-  requiredDocuments: { type: string; label: string }[];
-  draftDocs: string[];
-  driveParentFolderId: string | null;
-  callbackUrl: string;
-}
-
-/** Absolute URL Make posts the created Drive folder back to. */
-function callbackUrl(): string {
-  return `${env.APP_BASE_URL.replace(/\/$/, "")}/api/grantops/automation/callback`;
-}
-
-export function buildApprovalPayload(
-  opp: FundingOpportunity,
-  app: GrantApplication,
-): GrantApprovalPayload {
-  return {
-    opportunityId: opp.id,
-    applicationId: app.id,
-    opportunityName: opp.opportunityName,
-    fundingOrganization: opp.fundingOrganization,
-    applicantEntity: app.applicantEntity,
-    deadline: opp.deadline,
-    daysUntilDeadline: daysUntil(opp.deadline),
-    fundingAmount: opp.fundingAmount,
-    applicationUrl: opp.applicationUrl ?? null,
-    requiredDocuments: opp.requiredDocuments.map((dt) => ({
-      type: dt,
-      label: DOCUMENT_LABELS[dt] ?? dt,
-    })),
-    draftDocs: [...DRAFT_DOC_SECTIONS],
-    driveParentFolderId: env.GRANTOPS_DRIVE_PARENT_FOLDER_ID ?? null,
-    callbackUrl: callbackUrl(),
-  };
+/** The grant folder's name — stable so re-approval resolves the same folder. */
+function folderName(opp: FundingOpportunity): string {
+  const date = opp.deadline ? opp.deadline.slice(0, 10) : "rolling";
+  return `${date} — ${opp.opportunityName} (${opp.bestApplicantEntity})`;
 }
 
 /**
- * POST the approval to the Make.com webhook so Make builds the Drive workspace.
- * No-ops silently when unconfigured; never throws (best-effort, fire-and-forget).
- * Returns true only when the webhook accepted the payload.
+ * Create the Drive workspace for a freshly-approved grant: a folder (search-or-create,
+ * so it's idempotent) plus one blank Google Doc per draft section, then link the folder
+ * URL onto the application. Best-effort: if Google isn't connected or any call fails,
+ * it logs and no-ops — never throws into the approval. Returns the folder URL or null.
  */
-export async function fireGrantApprovalWebhook(
+export async function createDriveWorkspace(
   opp: FundingOpportunity,
   app: GrantApplication,
-): Promise<boolean> {
-  const url = env.MAKE_GRANTOPS_WEBHOOK_URL;
-  if (!url) return false;
+): Promise<string | null> {
   try {
-    const res = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(buildApprovalPayload(opp, app)),
-      cache: "no-store",
-    });
-    return res.ok;
+    const parentId = env.GRANTOPS_DRIVE_PARENT_FOLDER_ID || "root";
+    const folder = await driveEnsureFolder(folderName(opp), parentId);
+
+    // Draft docs in parallel; a single doc failing must not sink the rest.
+    await Promise.all(
+      DRAFT_DOC_SECTIONS.map((section) =>
+        driveCreateDoc(section, folder.id).catch((err) => {
+          console.error(
+            "[grantops] draft doc failed:",
+            section,
+            err instanceof Error ? err.message : err,
+          );
+        }),
+      ),
+    );
+
+    if (folder.webViewLink) updateApplication(app.id, { driveFolderUrl: folder.webViewLink });
+    return folder.webViewLink ?? null;
   } catch (err) {
-    console.error("[grantops] Make webhook failed:", err instanceof Error ? err.message : err);
-    return false;
+    if (isNotConnected(err)) {
+      console.warn("[grantops] Drive not connected — skipping workspace creation");
+    } else {
+      console.error(
+        "[grantops] Drive workspace failed:",
+        err instanceof Error ? err.message : err,
+      );
+    }
+    return null;
   }
 }
 
 /**
- * Create the ClickUp deadline tasks for a freshly-approved grant: one "Submit"
- * task due on the deadline, plus one "Gather" task per required document. Best-effort
- * and individually guarded — ClickUp being unconfigured or a single task failing must
- * not abort the rest or the approval. Returns the count created.
+ * Create the ClickUp deadline tasks for a freshly-approved grant: one "Submit" task
+ * due on the deadline, plus one "Gather" task per required document. Best-effort and
+ * individually guarded — ClickUp being unconfigured or a single task failing must not
+ * abort the rest or the approval. Returns the count created.
  */
 export async function createDeadlineTasksForApplication(
   opp: FundingOpportunity,

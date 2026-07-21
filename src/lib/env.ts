@@ -85,13 +85,10 @@ const schema = z.object({
   // (AES-256-GCM). Any passphrase works (SHA-256 derived). Set in production.
   SECRET_ENCRYPTION_KEY: z.string().optional(),
 
-  // GrantOps automation — when a grant is CAPPO-approved, Cappo fires this Make.com
-  // custom-webhook so Make creates the Drive folder + draft-doc workspace. Unset =
-  // the automation silently no-ops (approval, checklist, and ClickUp tasks still work).
-  MAKE_GRANTOPS_WEBHOOK_URL: z.string().url().optional(),
-  // Drive parent folder new grant-application folders are created under (the
-  // "Grant Applications" home). Passed to Make in the webhook payload. Unset =
-  // Make falls back to its scenario default (or My Drive root).
+  // GrantOps automation — Drive parent folder new grant-application folders are
+  // created under (the "Grant Applications" home). When a grant is CAPPO-approved,
+  // Cappo natively creates the folder + draft docs here via the shared Google
+  // connection. Unset = folders are created in My Drive root.
   GRANTOPS_DRIVE_PARENT_FOLDER_ID: z.string().optional(),
 });
 
@@ -120,6 +117,3 @@ export const isAiConfigured = () =>
 
 /** Persistence is available only when a database URL is set. */
 export const isDbConfigured = () => Boolean(env.DATABASE_URL);
-
-/** GrantOps → Make.com approval automation fires only when the webhook URL is set. */
-export const isGrantOpsAutomationConfigured = () => Boolean(env.MAKE_GRANTOPS_WEBHOOK_URL);

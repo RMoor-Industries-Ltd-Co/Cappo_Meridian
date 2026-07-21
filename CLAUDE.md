@@ -145,38 +145,34 @@ this via the `_CHAIN_OF_COMMAND` constant in `src/lib/agent.ts` — Cappo previo
 named ALLIE once in passing and never mentioned ALLEN at all, so he couldn't correctly
 answer "who do you report to."
 
-## GrantOps approval automation (Make.com + Google Drive)
+## GrantOps approval automation (native — Google Drive + ClickUp)
 
 When a grant is **CAPPO-approved** (`cappoDecisionAction` → `approved_to_apply`,
 `src/lib/grantops/actions.ts`), Cappo auto-scaffolds the application instead of leaving
-it to manual setup:
+it to manual setup. All three steps run natively in the approval server action — no
+external automation platform:
 
 1. **Auto-opens the application workspace** (`createApplication`) so the internal
    checklist (derived from `requiredDocuments`) exists immediately.
-2. **Creates ClickUp deadline tasks natively** (`createDeadlineTasksForApplication`,
+2. **Creates ClickUp deadline tasks** (`createDeadlineTasksForApplication`,
    `src/lib/grantops/automation.ts`) — one `Submit:` task due on the deadline plus a
-   `Gather:` task per required document, tagged `grantops`, via the existing
-   `clickupCreateTask`. (ClickUp stays in Cappo because Make has no ClickUp connection.)
-3. **Fires a Make.com webhook** (`MAKE_GRANTOPS_WEBHOOK_URL`) so a Make scenario creates
-   the **Drive folder + draft Google Docs** (the "draft workspace"), then calls back
-   `POST /api/grantops/automation/callback` (authed with `AGENT_API_KEY`, same
-   `x-agent-key` pattern as `/api/agent`) to link the folder URL onto the application
-   (`driveFolderUrl`).
+   `Gather:` task per required document, tagged `grantops`, via `clickupCreateTask`.
+3. **Creates the Google Drive workspace** (`createDriveWorkspace`) using the shared
+   Google connection (`src/lib/connectors/driveFs.ts`): `driveEnsureFolder`
+   (search-or-create under `GRANTOPS_DRIVE_PARENT_FOLDER_ID`) + a blank Google Doc per
+   draft section via `driveCreateDoc`, then links the folder's `webViewLink` onto the
+   application (`driveFolderUrl`) synchronously — no callback needed.
 
-Everything is **best-effort / fire-and-forget**: any integration being unconfigured or
-down never blocks the approval. An `automationFiredAt` guard on the application prevents
-a re-approval from double-scaffolding; the Make scenario's search-or-create + the Drive
-folder itself are the durable records (Cappo's store is in-memory by design — see
-`grantops/store.ts:11`). Unset `MAKE_GRANTOPS_WEBHOOK_URL` → the webhook silently no-ops;
-the checklist + ClickUp tasks still run.
+Everything is **best-effort**: any integration being unconfigured or down never blocks
+the approval (a not-connected Drive logs + no-ops). An `automationFiredAt` guard prevents
+a re-approval from double-scaffolding; `driveEnsureFolder` is idempotent, and the Drive
+folder + ClickUp tasks are the durable records (Cappo's store is in-memory by design —
+see `grantops/store.ts:11`). `GRANTOPS_DRIVE_PARENT_FOLDER_ID` unset → folders land in
+My Drive root. Requires Cappo's Google connector to be connected (Settings → Integrations).
 
-**Make side:** an inactive scenario "GrantOps Approval → Drive workspace" is scaffolded
-(webhook → Google Drive create-folder → HTTP callback → iterator over `draftDocs` →
-Google Drive create-doc). To go live: in Make, bind the two Google Drive modules to a
-**Google Drive (`google-restricted`) connection** (the existing generic "google"
-connection isn't compatible with the Drive app), pick the parent folder
-(`GRANTOPS_DRIVE_PARENT_FOLDER_ID`), fill the `x-agent-key` header with `AGENT_API_KEY`,
-then activate. Set `MAKE_GRANTOPS_WEBHOOK_URL` in Cappo's environment to the webhook URL.
+> This was briefly built as a Make.com webhook + callback; we reverted to native because
+> Cappo already owns every Drive/ClickUp primitive, making it simpler, synchronous, and
+> free of webhook/callback fragility.
 
 ## PIAAR initiatives — Cappo's one permitted GitHub write
 
