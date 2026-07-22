@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Card, SectionTitle } from "@/components/ui/Card";
-import { Sparkles } from "lucide-react";
+import { FolderOpen, Sparkles } from "lucide-react";
 import { getApplication, getOpportunity } from "@/lib/grantops/store";
 import {
   approveApplicationAction,
@@ -50,6 +50,16 @@ export default async function ApplicationWorkspacePage({ params }: { params: Pro
           <h2 className="text-xl font-semibold text-fg">{o?.opportunityName ?? a.fundingOpportunityId}</h2>
           <Pill tone="info">{a.applicationStatus.replace(/_/g, " ")}</Pill>
           {a.humanApprovalRequired ? <Pill tone="warn">Human approval required</Pill> : <Pill tone="pos">Approved by {a.approvedBy}</Pill>}
+          {a.driveFolderUrl && (
+            <a
+              href={a.driveFolderUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1.5 rounded-md border border-gold/50 px-3 py-1.5 text-xs font-semibold text-gold hover:bg-gold/10"
+            >
+              <FolderOpen size={14} /> Open Drive workspace
+            </a>
+          )}
         </div>
         {o && (
           <p className="text-sm text-subtle">
