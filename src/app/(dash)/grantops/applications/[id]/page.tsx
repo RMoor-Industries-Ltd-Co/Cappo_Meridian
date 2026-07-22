@@ -1,13 +1,17 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Card, SectionTitle } from "@/components/ui/Card";
+import { Sparkles } from "lucide-react";
 import { getApplication, getOpportunity } from "@/lib/grantops/store";
 import {
   approveApplicationAction,
+  generateAllDraftsAction,
+  generateDraftAction,
   recordSubmissionAction,
   toggleChecklistAction,
   updateApplicationAction,
 } from "@/lib/grantops/actions";
+import { isAiConfigured } from "@/lib/env";
 import { Pill, money } from "@/components/grantops/badges";
 
 export const dynamic = "force-dynamic";
@@ -36,6 +40,7 @@ export default async function ApplicationWorkspacePage({ params }: { params: Pro
   if (!a) notFound();
   const o = getOpportunity(a.fundingOpportunityId);
   const done = a.applicationChecklist.filter((c) => c.done).length;
+  const aiOn = isAiConfigured();
 
   return (
     <div className="flex flex-col gap-5">
@@ -156,12 +161,39 @@ export default async function ApplicationWorkspacePage({ params }: { params: Pro
 
       {/* Drafts */}
       <Card className="p-5">
-        <SectionTitle title="Application drafts (for founder review — never auto-submitted)" />
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <SectionTitle title="Application drafts (for founder review — never auto-submitted)" />
+          {aiOn && (
+            <form action={generateAllDraftsAction}>
+              <input type="hidden" name="id" value={a.id} />
+              <button className="inline-flex items-center gap-1.5 rounded-md border border-gold/50 px-3 py-1.5 text-xs font-semibold text-gold hover:bg-gold/10">
+                <Sparkles size={13} /> Draft all with Cappo
+              </button>
+            </form>
+          )}
+        </div>
+        <p className="mb-4 text-xs text-subtle">
+          {aiOn
+            ? "Cappo pre-writes each section from the grant's requirements and the applicant entity's profile (Summary/Bio on the Entities page). Generated text lands in the box below — copy, paste, and refine it. Generating one section saves your edits to the others first."
+            : "Connect an AI provider (Settings → Integrations) to let Cappo pre-write these sections. The boxes are copy/paste editable either way."}
+        </p>
         <form action={updateApplicationAction} className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <input type="hidden" name="id" value={a.id} />
           {DRAFT_FIELDS.map(([name, label]) => (
             <div key={name}>
-              <label className={labelCls}>{label}</label>
+              <div className="mb-1 flex items-center justify-between gap-2">
+                <label className={labelCls}>{label}</label>
+                {aiOn && (
+                  <button
+                    formAction={generateDraftAction}
+                    name="field"
+                    value={name}
+                    className="inline-flex items-center gap-1 rounded border border-border px-2 py-0.5 text-[11px] text-subtle hover:border-gold/50 hover:text-gold"
+                  >
+                    <Sparkles size={11} /> Draft
+                  </button>
+                )}
+              </div>
               <textarea
                 name={name}
                 rows={4}

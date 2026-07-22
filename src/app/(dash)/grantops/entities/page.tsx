@@ -14,6 +14,8 @@ const READINESS_TONE: Record<string, "pos" | "warn" | "neg" | "neutral"> = {
 };
 
 const sel = "rounded-md border border-border bg-panel-2 px-2 py-1 text-xs text-fg";
+const txtArea = "w-full rounded-md border border-border bg-panel-2 px-3 py-2 text-sm text-fg focus:border-gold/50 focus:outline-none";
+const txtLabel = "mb-1 block text-xs uppercase tracking-wide text-subtle";
 
 const READINESS_FIELDS: [string, string, (e: Record<string, unknown>) => string][] = [
   ["einStatus", "EIN", (e) => e.einStatus as string],
@@ -64,11 +66,27 @@ export default function EntitiesPage() {
                 );
               })}
             </div>
-            <div>
-              <label className="mb-1 block text-xs uppercase tracking-wide text-subtle">Notes</label>
-              <input name="notes" defaultValue={e.notes ?? ""} className="w-full rounded-md border border-border bg-panel-2 px-3 py-2 text-sm text-fg" />
+            <SectionTitle title="Knowledge base (Cappo reads this when drafting grants)" />
+            <p className="-mt-1 text-xs text-subtle">
+              Persistent context for this entity. The more detail here — especially for
+              3E, RMG, GovernanceIQ, and the founders — the more accurate Cappo&rsquo;s
+              grant drafts. All fields are copy/paste friendly.
+            </p>
+            <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+              <div>
+                <label className={txtLabel}>Summary</label>
+                <textarea name="summary" rows={5} defaultValue={e.summary ?? ""} className={txtArea} placeholder="What this entity is and does — mission, offerings, who it serves, stage/traction…" />
+              </div>
+              <div>
+                <label className={txtLabel}>Bio</label>
+                <textarea name="bio" rows={5} defaultValue={e.bio ?? ""} className={txtArea} placeholder="Founder / leadership bio, or the entity's backstory and credentials…" />
+              </div>
             </div>
-            <button className="btn-gold self-start rounded-md px-4 py-2 text-sm font-semibold">Save readiness</button>
+            <div>
+              <label className={txtLabel}>Notes</label>
+              <textarea name="notes" rows={2} defaultValue={e.notes ?? ""} className={txtArea} placeholder="Working notes…" />
+            </div>
+            <button className="btn-gold self-start rounded-md px-4 py-2 text-sm font-semibold">Save entity</button>
           </form>
         </Card>
       ))}

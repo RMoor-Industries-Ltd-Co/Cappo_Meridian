@@ -11,11 +11,14 @@
  */
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import {
   approveApplication,
   createApplication,
   createDocument,
   createOpportunity,
+  getApplication,
+  getEntityByCode,
   getOpportunity,
   recordCappoDecision,
   recordSubmission,
@@ -26,6 +29,10 @@ import {
   updateOpportunity,
 } from "./store";
 import { createDeadlineTasksForApplication, createDriveWorkspace } from "./automation";
+import { DRAFT_FIELD_SET, DRAFT_SECTIONS, buildDraftPrompt } from "./drafting";
+import { buildBriefingPrompt } from "./briefing";
+import { isAiConfigured } from "@/lib/env";
+import { runCappoAgent } from "@/lib/agent";
 import type {
   AwardType,
   CappoDecision,
@@ -196,8 +203,11 @@ export async function updateEntityAction(form: FormData) {
     const v = str(form.get(field));
     if (v) patch[field] = v;
   }
-  const notes = form.get("notes");
-  if (notes !== null) patch.notes = typeof notes === "string" ? notes : "";
+  // Free-text knowledge-base fields (persist even when cleared to empty).
+  for (const f of ["summary", "bio", "notes"] as const) {
+    const v = form.get(f);
+    if (v !== null) patch[f] = typeof v === "string" ? v : "";
+  }
   updateEntity(id, patch);
   revalidatePath(`${B}/entities`);
 }
@@ -222,4 +232,97 @@ export async function updateDocumentStatusAction(form: FormData) {
   if (!id || !status) return;
   updateDocument(id, { status, fileUrl: str(form.get("fileUrl")) });
   revalidatePath(`${B}/vault`);
+}
+
+// ─── AI draft authoring (Application drafts card) ─────────────────────────────
+
+// The draft textareas the workspace form submits — the six narrative sections plus
+// the human-owned risk notes. Persisted together so generating one section never
+// discards unsaved edits to the others.
+const DRAFT_FORM_FIELDS = [...DRAFT_SECTIONS.map((s) => s.field), "riskNotes"];
+
+function collectDraftPatch(form: FormData): Partial<GrantApplication> {
+  const patch: Record<string, unknown> = {};
+  for (const f of DRAFT_FORM_FIELDS) {
+    const v = form.get(f);
+    if (v !== null) patch[f] = typeof v === "string" ? v : "";
+  }
+  return patch as Partial<GrantApplication>;
+}
+
+/**
+ * Pre-write ONE draft section with Cappo. Saves current textarea edits first, then
+ * (if AI is configured) generates the target section from the grant + entity context
+ * and stores it. Best-effort: an AI failure leaves the saved edits intact. The text
+ * lands in the editable textarea for the partner to copy/paste and refine.
+ */
+export async function generateDraftAction(form: FormData) {
+  const id = str(form.get("id"));
+  const field = str(form.get("field"));
+  if (!id || !field || !DRAFT_FIELD_SET.has(field)) return;
+  updateApplication(id, collectDraftPatch(form)); // don't lose unsaved edits
+  if (!isAiConfigured()) return;
+  const app = getApplication(id);
+  const opp = app ? getOpportunity(app.fundingOpportunityId) : undefined;
+  if (!app || !opp) return;
+  const entity = getEntityByCode(app.applicantEntity);
+  try {
+    const text = await runCappoAgent(buildDraftPrompt(field, opp, entity));
+    if (text?.trim()) updateApplication(id, { [field]: text.trim() } as Partial<GrantApplication>);
+  } catch (e) {
+    console.error("[grantops] draft generation failed:", e instanceof Error ? e.message : e);
+  }
+  revalidatePath(`${B}/applications/${id}`);
+}
+
+/** Pre-write ALL draft sections with Cappo (concurrently). Same guarantees as above. */
+export async function generateAllDraftsAction(form: FormData) {
+  const id = str(form.get("id"));
+  if (!id) return;
+  updateApplication(id, collectDraftPatch(form));
+  if (!isAiConfigured()) return;
+  const app = getApplication(id);
+  const opp = app ? getOpportunity(app.fundingOpportunityId) : undefined;
+  if (!app || !opp) return;
+  const entity = getEntityByCode(app.applicantEntity);
+  await Promise.allSettled(
+    DRAFT_SECTIONS.map(async (s) => {
+      const text = await runCappoAgent(buildDraftPrompt(s.field, opp, entity));
+      if (text?.trim()) updateApplication(id, { [s.field]: text.trim() } as Partial<GrantApplication>);
+    }),
+  );
+  revalidatePath(`${B}/applications/${id}`);
+}
+
+// ─── Pre-application briefing ─────────────────────────────────────────────────
+
+/** Generate + cache the AI-written "why this fits" brief for the briefing view. */
+export async function generateFitBriefingAction(form: FormData) {
+  const id = str(form.get("id"));
+  if (!id) return;
+  const o = getOpportunity(id);
+  if (!o || !isAiConfigured()) return;
+  const entity = getEntityByCode(o.bestApplicantEntity);
+  try {
+    const brief = await runCappoAgent(buildBriefingPrompt(o, entity));
+    if (brief?.trim())
+      updateOpportunity(id, { fitBriefing: brief.trim(), fitBriefingAt: new Date().toISOString() });
+  } catch (e) {
+    console.error("[grantops] briefing generation failed:", e instanceof Error ? e.message : e);
+  }
+  revalidatePath(`${B}/opportunities/${id}/briefing`);
+}
+
+/**
+ * The briefing's confirm-to-proceed action: open (or reuse) the application workspace
+ * and jump the user straight into it to begin the forms. This is what the "I've read
+ * this" gate submits — the read-first step before filling anything out.
+ */
+export async function beginApplicationAction(form: FormData) {
+  const oppId = str(form.get("opportunityId"));
+  if (!oppId) return;
+  const app = createApplication(oppId);
+  revalidatePath(`${B}/applications`);
+  revalidatePath(`${B}/opportunities/${oppId}`);
+  if (app) redirect(`${B}/applications/${app.id}`);
 }

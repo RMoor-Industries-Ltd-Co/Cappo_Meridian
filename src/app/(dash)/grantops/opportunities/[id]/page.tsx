@@ -10,7 +10,6 @@ import {
 import { riskFlags, type FundingOpportunity } from "@/lib/grantops/types";
 import {
   cappoDecisionAction,
-  openApplicationAction,
   updateOpportunityScoresAction,
 } from "@/lib/grantops/actions";
 import {
@@ -203,14 +202,18 @@ export default async function OpportunityDetailPage({ params }: { params: Promis
             <Link href={`/grantops/applications/${app.id}`} className="text-sm text-gold hover:underline">Open workspace →</Link>
           </div>
         ) : (
-          <form action={openApplicationAction} className="flex items-center justify-between gap-3">
-            <input type="hidden" name="opportunityId" value={o.id} />
+          <div className="flex items-center justify-between gap-3">
             <p className="text-sm text-subtle">
-              Create a prep workspace — builds a document checklist from the program&rsquo;s requirements. No
-              external submission happens here.
+              Read the pre-application briefing first — the fit, requirements, and risks — then agree
+              to open a prep workspace. No external submission happens here.
             </p>
-            <button className="btn-gold shrink-0 rounded-md px-4 py-2 text-sm font-semibold">Open workspace</button>
-          </form>
+            <Link
+              href={`/grantops/opportunities/${o.id}/briefing`}
+              className="btn-gold shrink-0 rounded-md px-4 py-2 text-sm font-semibold"
+            >
+              Read briefing →
+            </Link>
+          </div>
         )}
       </Card>
     </div>
