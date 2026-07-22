@@ -100,6 +100,7 @@ export function buildDraftPrompt(
   field: string,
   o: FundingOpportunity,
   entity: EntityProfile | undefined,
+  knowledge?: string,
 ): string {
   const section = DRAFT_SECTIONS.find((s) => s.field === field);
   const label = section?.label ?? field;
@@ -112,6 +113,7 @@ export function buildDraftPrompt(
     "",
     "=== APPLICANT ===",
     entityContext(entity, o.bestApplicantEntity),
+    knowledge ? "\n=== APPLICANT DOCUMENTS (from the entity's Drive knowledge folder) ===\n" + knowledge : "",
     "",
     "=== TASK ===",
     guidance,

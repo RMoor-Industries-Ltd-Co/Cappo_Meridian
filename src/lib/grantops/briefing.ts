@@ -98,6 +98,7 @@ export function buildFitAssessment(
 export function buildBriefingPrompt(
   o: FundingOpportunity,
   entity: EntityProfile | undefined,
+  knowledge?: string,
 ): string {
   const reqs = o.requiredDocuments.map((d) => DOCUMENT_LABELS[d] ?? d).join(", ") || "not specified";
   const ent = entity
@@ -125,6 +126,7 @@ export function buildBriefingPrompt(
     "",
     "=== APPLICANT ===",
     ent,
+    knowledge ? "\n=== APPLICANT DOCUMENTS (from the entity's Drive knowledge folder) ===\n" + knowledge : "",
     "",
     "=== TASK ===",
     "Write a 200–350 word briefing covering: (1) why this fits (or doesn't) the entity's mission and stage, (2) the strongest angle to win it, (3) the realistic effort/requirements, and (4) any risks or 'verify-first' cautions. Ground every claim in the context above — do not invent facts. Return prose only, no headings or preamble.",

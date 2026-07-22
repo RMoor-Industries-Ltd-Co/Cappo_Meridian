@@ -90,6 +90,10 @@ const schema = z.object({
   // Cappo natively creates the folder + draft docs here via the shared Google
   // connection. Unset = folders are created in My Drive root.
   GRANTOPS_DRIVE_PARENT_FOLDER_ID: z.string().optional(),
+  // GrantOps entity knowledge bank — the AMG legal Drive folder that holds per-entity
+  // context documents Cappo reads when drafting/briefing. Each entity gets a subfolder
+  // here. Unset = a built-in default AMG legal folder id (see grantops/knowledge.ts).
+  GRANTOPS_KNOWLEDGE_FOLDER_ID: z.string().optional(),
 });
 
 const parsed = schema.safeParse(process.env);

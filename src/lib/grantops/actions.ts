@@ -31,6 +31,7 @@ import {
 import { createDeadlineTasksForApplication, createDriveWorkspace } from "./automation";
 import { DRAFT_FIELD_SET, DRAFT_SECTIONS, buildDraftPrompt } from "./drafting";
 import { buildBriefingPrompt } from "./briefing";
+import { readEntityKnowledge } from "./knowledge";
 import { isAiConfigured } from "@/lib/env";
 import { runCappoAgent } from "@/lib/agent";
 import type {
@@ -266,8 +267,9 @@ export async function generateDraftAction(form: FormData) {
   const opp = app ? getOpportunity(app.fundingOpportunityId) : undefined;
   if (!app || !opp) return;
   const entity = getEntityByCode(app.applicantEntity);
+  const knowledge = entity ? await readEntityKnowledge(entity) : "";
   try {
-    const text = await runCappoAgent(buildDraftPrompt(field, opp, entity));
+    const text = await runCappoAgent(buildDraftPrompt(field, opp, entity, knowledge));
     if (text?.trim()) updateApplication(id, { [field]: text.trim() } as Partial<GrantApplication>);
   } catch (e) {
     console.error("[grantops] draft generation failed:", e instanceof Error ? e.message : e);
@@ -285,9 +287,10 @@ export async function generateAllDraftsAction(form: FormData) {
   const opp = app ? getOpportunity(app.fundingOpportunityId) : undefined;
   if (!app || !opp) return;
   const entity = getEntityByCode(app.applicantEntity);
+  const knowledge = entity ? await readEntityKnowledge(entity) : ""; // read once, reuse
   await Promise.allSettled(
     DRAFT_SECTIONS.map(async (s) => {
-      const text = await runCappoAgent(buildDraftPrompt(s.field, opp, entity));
+      const text = await runCappoAgent(buildDraftPrompt(s.field, opp, entity, knowledge));
       if (text?.trim()) updateApplication(id, { [s.field]: text.trim() } as Partial<GrantApplication>);
     }),
   );
@@ -303,8 +306,9 @@ export async function generateFitBriefingAction(form: FormData) {
   const o = getOpportunity(id);
   if (!o || !isAiConfigured()) return;
   const entity = getEntityByCode(o.bestApplicantEntity);
+  const knowledge = entity ? await readEntityKnowledge(entity) : "";
   try {
-    const brief = await runCappoAgent(buildBriefingPrompt(o, entity));
+    const brief = await runCappoAgent(buildBriefingPrompt(o, entity, knowledge));
     if (brief?.trim())
       updateOpportunity(id, { fitBriefing: brief.trim(), fitBriefingAt: new Date().toISOString() });
   } catch (e) {

@@ -2,6 +2,7 @@ import { Card, SectionTitle } from "@/components/ui/Card";
 import { listEntities } from "@/lib/grantops/store";
 import { updateEntityAction } from "@/lib/grantops/actions";
 import { Pill } from "@/components/grantops/badges";
+import { EntityKnowledge } from "@/components/grantops/EntityKnowledge";
 
 export const dynamic = "force-dynamic";
 
@@ -88,6 +89,8 @@ export default function EntitiesPage() {
             </div>
             <button className="btn-gold self-start rounded-md px-4 py-2 text-sm font-semibold">Save entity</button>
           </form>
+
+          <EntityKnowledge entityCode={e.entityCode} entityName={e.entityName} />
         </Card>
       ))}
     </div>
