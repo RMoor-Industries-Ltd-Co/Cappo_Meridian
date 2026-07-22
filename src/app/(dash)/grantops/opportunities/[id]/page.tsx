@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ExternalLink } from "lucide-react";
+import { ExternalLink, FolderOpen } from "lucide-react";
 import { Card, SectionTitle } from "@/components/ui/Card";
 import {
   getOpportunity,
@@ -10,7 +10,6 @@ import {
 import { riskFlags, type FundingOpportunity } from "@/lib/grantops/types";
 import {
   cappoDecisionAction,
-  openApplicationAction,
   updateOpportunityScoresAction,
 } from "@/lib/grantops/actions";
 import {
@@ -71,6 +70,31 @@ export default async function OpportunityDetailPage({ params }: { params: Promis
         <Card className="p-4"><div className="text-xs text-subtle">Best applicant</div><div className="text-lg font-semibold text-fg">{o.bestApplicantEntity}</div></Card>
         <Card className="p-4"><div className="text-xs text-subtle">Award type</div><div className="text-lg font-semibold text-fg capitalize">{o.awardType.replace(/_/g, " ")}</div></Card>
       </div>
+
+      <Card gold className="p-5">
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+          <SectionTitle title="Cappo's fit briefing" />
+          <Link href={`/grantops/opportunities/${o.id}/briefing`} className="text-sm font-semibold text-gold hover:underline">
+            {o.fitBriefing ? "Read full briefing →" : "Open pre-application briefing →"}
+          </Link>
+        </div>
+        {o.fitBriefing ? (
+          <>
+            <p className="whitespace-pre-wrap text-sm text-fg">
+              {o.fitBriefing.length > 480 ? `${o.fitBriefing.slice(0, 480).trimEnd()}…` : o.fitBriefing}
+            </p>
+            <p className="mt-2 text-[11px] text-subtle">
+              Grounded in {o.bestApplicantEntity}&rsquo;s Drive knowledge base
+              {o.fitBriefingAt ? ` · ${o.fitBriefingAt.slice(0, 10)}` : ""}
+            </p>
+          </>
+        ) : (
+          <p className="text-sm text-subtle">
+            A read-first briefing of why this fits {o.bestApplicantEntity} — the fit assessment, requirements,
+            and risks, grounded in the entity&rsquo;s Drive documents. Read it before starting the application.
+          </p>
+        )}
+      </Card>
 
       <Card className="p-5">
         <SectionTitle title="Risk & governance flags" />
@@ -200,17 +224,28 @@ export default async function OpportunityDetailPage({ params }: { params: Promis
               <Pill tone="info">{app.applicationStatus.replace(/_/g, " ")}</Pill>
               {app.humanApprovalRequired ? <Pill tone="warn">Human approval required</Pill> : <Pill tone="pos">Approved by {app.approvedBy}</Pill>}
             </div>
-            <Link href={`/grantops/applications/${app.id}`} className="text-sm text-gold hover:underline">Open workspace →</Link>
+            <div className="flex items-center gap-3">
+              {app.driveFolderUrl && (
+                <a href={app.driveFolderUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-sm text-gold hover:underline">
+                  <FolderOpen size={14} /> Drive
+                </a>
+              )}
+              <Link href={`/grantops/applications/${app.id}`} className="text-sm text-gold hover:underline">Open workspace →</Link>
+            </div>
           </div>
         ) : (
-          <form action={openApplicationAction} className="flex items-center justify-between gap-3">
-            <input type="hidden" name="opportunityId" value={o.id} />
+          <div className="flex items-center justify-between gap-3">
             <p className="text-sm text-subtle">
-              Create a prep workspace — builds a document checklist from the program&rsquo;s requirements. No
-              external submission happens here.
+              Read the pre-application briefing first — the fit, requirements, and risks — then agree
+              to open a prep workspace. No external submission happens here.
             </p>
-            <button className="btn-gold shrink-0 rounded-md px-4 py-2 text-sm font-semibold">Open workspace</button>
-          </form>
+            <Link
+              href={`/grantops/opportunities/${o.id}/briefing`}
+              className="btn-gold shrink-0 rounded-md px-4 py-2 text-sm font-semibold"
+            >
+              Read briefing →
+            </Link>
+          </div>
         )}
       </Card>
     </div>

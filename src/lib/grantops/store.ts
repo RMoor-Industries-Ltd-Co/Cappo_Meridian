@@ -183,6 +183,10 @@ export function listEntities(): EntityProfile[] {
 export function getEntity(id: string): EntityProfile | undefined {
   return state().entities.find((e) => e.id === id);
 }
+/** Look up an entity profile by its EntityCode (e.g. "HVN") — used to build draft context. */
+export function getEntityByCode(code: string): EntityProfile | undefined {
+  return state().entities.find((e) => e.entityCode === code);
+}
 export function updateEntity(id: string, patch: Partial<EntityProfile>): EntityProfile | undefined {
   const e = getEntity(id);
   if (!e) return undefined;
@@ -265,6 +269,7 @@ export function createApplication(oppId: string): GrantApplication | undefined {
     submittedDate: null,
     confirmationNumber: null,
     followUpDate: null,
+    automationFiredAt: null,
     createdAt: now,
     updatedAt: now,
   };

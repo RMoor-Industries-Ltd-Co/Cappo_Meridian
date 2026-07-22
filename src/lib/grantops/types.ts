@@ -88,6 +88,10 @@ export interface FundingOpportunity {
   cappoDecision: CappoDecision;
   cappoNotes?: string;
   allieNotes?: string;
+  // AI-written "why this fits {entity}" brief, generated on demand from the
+  // pre-application briefing view (generateFitBriefingAction) and cached here.
+  fitBriefing?: string | null;
+  fitBriefingAt?: string | null;
   humanOwner: HumanOwner;
   submissionOwner?: HumanOwner | null;
 
@@ -133,6 +137,11 @@ export interface EntityProfile {
   defaultNarrative?: string;
   approvedBusinessSummary?: string;
   approvedUseOfFundsTemplate?: string;
+  // Persistent, copy/paste context a partner maintains for this entity — the
+  // knowledge base Cappo reads when pre-writing grant drafts. Especially important
+  // for the less-documented entities (3E, RMG, GovernanceIQ, and the two founders).
+  summary?: string; // what the entity is / does — an elevator-to-executive summary
+  bio?: string; // founder/leadership bio or entity backstory
   notes?: string;
   createdAt: string;
   updatedAt: string;
@@ -196,6 +205,9 @@ export interface GrantApplication {
   followUpDate?: string | null;
   complianceRequirements?: string;
   notes?: string;
+  // Set once the CAPPO-approval automation (Make webhook + ClickUp deadline tasks)
+  // has fired for this application, so a re-approval never double-scaffolds it.
+  automationFiredAt?: string | null;
   createdAt: string;
   updatedAt: string;
 }

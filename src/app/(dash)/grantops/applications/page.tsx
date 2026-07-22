@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { FolderOpen } from "lucide-react";
 import { Card } from "@/components/ui/Card";
 import { listApplications, getOpportunity } from "@/lib/grantops/store";
 import { Pill } from "@/components/grantops/badges";
@@ -34,9 +35,19 @@ export default function ApplicationsPage() {
                 <div className="text-xs text-subtle">
                   {a.applicantEntity} · checklist {done}/{a.applicationChecklist.length}
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   {a.humanApprovalRequired ? <Pill tone="warn">Approval required</Pill> : <Pill tone="pos">Approved</Pill>}
                   {a.confirmationNumber && <Pill tone="pos">Submitted · {a.confirmationNumber}</Pill>}
+                  {a.driveFolderUrl && (
+                    <a
+                      href={a.driveFolderUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1 text-xs text-gold hover:underline"
+                    >
+                      <FolderOpen size={12} /> Drive
+                    </a>
+                  )}
                 </div>
               </Card>
             );

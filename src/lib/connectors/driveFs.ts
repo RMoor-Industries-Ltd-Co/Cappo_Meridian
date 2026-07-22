@@ -288,6 +288,39 @@ export async function driveDownload(fileId: string): Promise<{ body: Buffer; mim
   };
 }
 
+const GOOGLE_DOC_MIME = "application/vnd.google-apps.document";
+
+/**
+ * Extract a file's readable text, for feeding Drive documents to Cappo as context.
+ * Google Docs are exported as text/plain; plain-text/JSON files are read directly.
+ * Binary/unsupported types (PDF, images, docx) return "" — callers treat empty as
+ * "no extractable text" and move on. Best-effort: never throws for content issues.
+ */
+export async function driveExportText(fileId: string, mimeType?: string): Promise<string> {
+  const drive = await client();
+  let mt = mimeType;
+  if (!mt) {
+    const meta = await drive.files.get({ fileId, fields: "mimeType", supportsAllDrives: true });
+    mt = meta.data.mimeType ?? "";
+  }
+  try {
+    if (mt === GOOGLE_DOC_MIME) {
+      const res = await drive.files.export({ fileId, mimeType: "text/plain" }, { responseType: "text" });
+      return typeof res.data === "string" ? res.data : String(res.data ?? "");
+    }
+    if (mt.startsWith("text/") || mt === "application/json" || mt === "application/xml") {
+      const res = await drive.files.get(
+        { fileId, alt: "media", supportsAllDrives: true },
+        { responseType: "text" },
+      );
+      return typeof res.data === "string" ? res.data : String(res.data ?? "");
+    }
+  } catch {
+    /* unreadable / export unsupported — treat as no text */
+  }
+  return "";
+}
+
 /** Create a blank Google Doc in the folder. */
 export async function driveCreateDoc(name: string, parentId = "root"): Promise<DriveItem> {
   const drive = await client();

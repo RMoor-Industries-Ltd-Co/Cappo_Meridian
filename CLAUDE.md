@@ -145,6 +145,35 @@ this via the `_CHAIN_OF_COMMAND` constant in `src/lib/agent.ts` — Cappo previo
 named ALLIE once in passing and never mentioned ALLEN at all, so he couldn't correctly
 answer "who do you report to."
 
+## GrantOps approval automation (native — Google Drive + ClickUp)
+
+When a grant is **CAPPO-approved** (`cappoDecisionAction` → `approved_to_apply`,
+`src/lib/grantops/actions.ts`), Cappo auto-scaffolds the application instead of leaving
+it to manual setup. All three steps run natively in the approval server action — no
+external automation platform:
+
+1. **Auto-opens the application workspace** (`createApplication`) so the internal
+   checklist (derived from `requiredDocuments`) exists immediately.
+2. **Creates ClickUp deadline tasks** (`createDeadlineTasksForApplication`,
+   `src/lib/grantops/automation.ts`) — one `Submit:` task due on the deadline plus a
+   `Gather:` task per required document, tagged `grantops`, via `clickupCreateTask`.
+3. **Creates the Google Drive workspace** (`createDriveWorkspace`) using the shared
+   Google connection (`src/lib/connectors/driveFs.ts`): `driveEnsureFolder`
+   (search-or-create under `GRANTOPS_DRIVE_PARENT_FOLDER_ID`) + a blank Google Doc per
+   draft section via `driveCreateDoc`, then links the folder's `webViewLink` onto the
+   application (`driveFolderUrl`) synchronously — no callback needed.
+
+Everything is **best-effort**: any integration being unconfigured or down never blocks
+the approval (a not-connected Drive logs + no-ops). An `automationFiredAt` guard prevents
+a re-approval from double-scaffolding; `driveEnsureFolder` is idempotent, and the Drive
+folder + ClickUp tasks are the durable records (Cappo's store is in-memory by design —
+see `grantops/store.ts:11`). `GRANTOPS_DRIVE_PARENT_FOLDER_ID` unset → folders land in
+My Drive root. Requires Cappo's Google connector to be connected (Settings → Integrations).
+
+> This was briefly built as a Make.com webhook + callback; we reverted to native because
+> Cappo already owns every Drive/ClickUp primitive, making it simpler, synchronous, and
+> free of webhook/callback fragility.
+
 ## PIAAR initiatives — Cappo's one permitted GitHub write
 
 `add_initiative` (`src/lib/agent.ts` + `src/lib/githubApp.ts`) appends a new row to

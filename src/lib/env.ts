@@ -84,6 +84,16 @@ const schema = z.object({
   // Secret-at-rest key — encrypts Google OAuth tokens stored in Postgres
   // (AES-256-GCM). Any passphrase works (SHA-256 derived). Set in production.
   SECRET_ENCRYPTION_KEY: z.string().optional(),
+
+  // GrantOps automation — Drive parent folder new grant-application folders are
+  // created under (the "Grant Applications" home). When a grant is CAPPO-approved,
+  // Cappo natively creates the folder + draft docs here via the shared Google
+  // connection. Unset = folders are created in My Drive root.
+  GRANTOPS_DRIVE_PARENT_FOLDER_ID: z.string().optional(),
+  // GrantOps entity knowledge bank — the AMG legal Drive folder that holds per-entity
+  // context documents Cappo reads when drafting/briefing. Each entity gets a subfolder
+  // here. Unset = a built-in default AMG legal folder id (see grantops/knowledge.ts).
+  GRANTOPS_KNOWLEDGE_FOLDER_ID: z.string().optional(),
 });
 
 const parsed = schema.safeParse(process.env);
