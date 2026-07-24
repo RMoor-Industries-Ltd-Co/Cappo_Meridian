@@ -54,12 +54,27 @@ function envFolderMap(): Record<string, string> {
 }
 
 /**
- * An explicit folder id for this entity, if any: the entity's own knowledgeFolderId
- * (set in the UI) takes precedence, then the GRANTOPS_ENTITY_FOLDERS env map. Null
- * means "no override — use the auto-created subfolder under the knowledge root."
+ * A single-secret-per-entity Doppler var: GRANTOPS_ENTITY_FOLDER_<CODE> (code
+ * uppercased, e.g. GRANTOPS_ENTITY_FOLDER_RMI). Easier to maintain in Doppler than a
+ * hand-escaped JSON blob, so this is the recommended way to pin each entity's folder.
+ */
+function individualFolderVar(code: string): string | undefined {
+  return process.env[`GRANTOPS_ENTITY_FOLDER_${code.toUpperCase()}`];
+}
+
+/**
+ * An explicit folder id for this entity, if any, in precedence order: the entity's own
+ * knowledgeFolderId (UI) → the per-entity Doppler var GRANTOPS_ENTITY_FOLDER_<CODE> →
+ * the GRANTOPS_ENTITY_FOLDERS JSON map. Each value may be a raw id or a Drive link.
+ * Null means "no override — use the auto-created subfolder under the knowledge root."
  */
 function entityFolderOverride(e: EntityProfile): string | null {
-  return parseFolderId(e.knowledgeFolderId) || envFolderMap()[e.entityCode] || null;
+  return (
+    parseFolderId(e.knowledgeFolderId) ||
+    parseFolderId(individualFolderVar(e.entityCode)) ||
+    parseFolderId(envFolderMap()[e.entityCode]) ||
+    null
+  );
 }
 
 export interface EntityFolder {

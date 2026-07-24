@@ -167,8 +167,10 @@ external automation platform:
 Each entity's context comes from a Drive folder Cappo reads via `readEntityKnowledge`
 (`src/lib/grantops/knowledge.ts`). The folder resolves in priority order: the entity's
 own `knowledgeFolderId` (set on the Entities page, "Drive knowledge folder" field) →
-the `GRANTOPS_ENTITY_FOLDERS` env map (`{"RMI":"<folderId>"}`, durable across redeploys)
+the per-entity Doppler var `GRANTOPS_ENTITY_FOLDER_<CODE>` (recommended — one secret
+per entity, e.g. `GRANTOPS_ENTITY_FOLDER_RMI`) → the `GRANTOPS_ENTITY_FOLDERS` JSON map
 → else an auto-created `{code} — {name}` subfolder under `GRANTOPS_KNOWLEDGE_FOLDER_ID`.
+Each value may be a raw id or a Drive folder link (parsed by `parseFolderId`).
 This lets e.g. RMI point at its existing shared **RECORDS BOOK** folder. `driveExportText`
 (`connectors/driveFs.ts`) reads Google Docs, text, **and Word/PDF** (`.docx`/`.doc`/`.pdf`
 are converted via a throwaway Google Doc copy — dependency-free). The connected account
