@@ -31,7 +31,7 @@ import {
 import { createDeadlineTasksForApplication, createDriveWorkspace } from "./automation";
 import { DRAFT_FIELD_SET, DRAFT_SECTIONS, buildDraftPrompt } from "./drafting";
 import { buildBriefingPrompt } from "./briefing";
-import { readEntityKnowledge } from "./knowledge";
+import { parseFolderId, readEntityKnowledge } from "./knowledge";
 import { isAiConfigured } from "@/lib/env";
 import { runCappoAgent } from "@/lib/agent";
 import type {
@@ -209,6 +209,9 @@ export async function updateEntityAction(form: FormData) {
     const v = form.get(f);
     if (v !== null) patch[f] = typeof v === "string" ? v : "";
   }
+  // Drive knowledge-folder override — accept a raw id or a Drive folder link.
+  const kf = form.get("knowledgeFolderId");
+  if (kf !== null) patch.knowledgeFolderId = parseFolderId(typeof kf === "string" ? kf : "");
   updateEntity(id, patch);
   revalidatePath(`${B}/entities`);
 }

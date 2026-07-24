@@ -142,6 +142,10 @@ export interface EntityProfile {
   // for the less-documented entities (3E, RMG, GovernanceIQ, and the two founders).
   summary?: string; // what the entity is / does — an elevator-to-executive summary
   bio?: string; // founder/leadership bio or entity backstory
+  // Optional override: an existing Drive folder id this entity's knowledge lives in
+  // (e.g. RMI → the shared "RECORDS BOOK" folder). When set, Cappo reads THIS folder
+  // instead of auto-creating a subfolder under the knowledge root. See knowledge.ts.
+  knowledgeFolderId?: string | null;
   notes?: string;
   createdAt: string;
   updatedAt: string;
