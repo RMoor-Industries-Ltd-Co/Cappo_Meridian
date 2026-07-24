@@ -34,14 +34,54 @@ function entityFolderName(e: EntityProfile): string {
   return `${e.entityCode} — ${e.shortName || e.entityName}`;
 }
 
+/** Extract a Drive folder id from a raw id or a Drive URL (…/folders/<id>, …/d/<id>). */
+export function parseFolderId(input: string | null | undefined): string | null {
+  const s = (input ?? "").trim();
+  if (!s) return null;
+  const m = s.match(/\/folders\/([A-Za-z0-9_-]+)/) || s.match(/\/d\/([A-Za-z0-9_-]+)/);
+  return m ? m[1] : s.split(/[?#]/)[0];
+}
+
+/** Parsed GRANTOPS_ENTITY_FOLDERS map (EntityCode → folder id), or {} if unset/invalid. */
+function envFolderMap(): Record<string, string> {
+  if (!env.GRANTOPS_ENTITY_FOLDERS) return {};
+  try {
+    const obj = JSON.parse(env.GRANTOPS_ENTITY_FOLDERS);
+    return obj && typeof obj === "object" ? (obj as Record<string, string>) : {};
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * An explicit folder id for this entity, if any: the entity's own knowledgeFolderId
+ * (set in the UI) takes precedence, then the GRANTOPS_ENTITY_FOLDERS env map. Null
+ * means "no override — use the auto-created subfolder under the knowledge root."
+ */
+function entityFolderOverride(e: EntityProfile): string | null {
+  return parseFolderId(e.knowledgeFolderId) || envFolderMap()[e.entityCode] || null;
+}
+
 export interface EntityFolder {
   id: string;
   name: string;
   webViewLink?: string;
 }
 
-/** Find (or create) the entity's knowledge subfolder under the root. */
+/**
+ * Resolve the entity's knowledge folder. With an override id (e.g. RMI → the shared
+ * RECORDS BOOK folder) Cappo reads THAT folder directly — no create. Otherwise it
+ * finds-or-creates a `{code} — {name}` subfolder under the knowledge root.
+ */
 export async function resolveEntityFolder(e: EntityProfile): Promise<EntityFolder> {
+  const override = entityFolderOverride(e);
+  if (override) {
+    return {
+      id: override,
+      name: entityFolderName(e),
+      webViewLink: `https://drive.google.com/drive/folders/${override}`,
+    };
+  }
   const folder = await driveEnsureFolder(entityFolderName(e), knowledgeRootId());
   return { id: folder.id, name: folder.name, webViewLink: folder.webViewLink };
 }
@@ -66,8 +106,9 @@ export async function listEntityKnowledge(e: EntityProfile): Promise<KnowledgeLi
 }
 
 // Ingestion budget — keep the prompt sane regardless of how much is in the folder.
-const MAX_FILES = 8;
-const MAX_CHARS = 12_000;
+// Sized to hold a governance record set (e.g. RMI's Records Book) without runaway tokens.
+const MAX_FILES = 10;
+const MAX_CHARS = 18_000;
 
 /**
  * Concatenate the readable text of an entity's Drive documents, capped to a budget,

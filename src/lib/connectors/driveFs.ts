@@ -289,12 +289,40 @@ export async function driveDownload(fileId: string): Promise<{ body: Buffer; mim
 }
 
 const GOOGLE_DOC_MIME = "application/vnd.google-apps.document";
+const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+const DOC_MIME = "application/msword";
+const PDF_MIME = "application/pdf";
+
+/**
+ * Convert a Word/PDF file to text by copying it into a TEMPORARY Google Doc (Drive
+ * does the .docx/PDF→Doc conversion server-side, incl. OCR for PDFs), exporting the
+ * Doc as plain text, then deleting the temp. Dependency-free (no mammoth/pdf libs);
+ * the temp lands in the connected account's My Drive and is removed in `finally`.
+ */
+async function textViaTempDoc(drive: drive_v3.Drive, fileId: string): Promise<string> {
+  let tempId: string | undefined;
+  try {
+    const { data } = await drive.files.copy({
+      fileId,
+      requestBody: { name: `_cappo_export_${fileId}`, mimeType: GOOGLE_DOC_MIME },
+      fields: "id",
+      supportsAllDrives: true,
+    });
+    tempId = data.id ?? undefined;
+    if (!tempId) return "";
+    const res = await drive.files.export({ fileId: tempId, mimeType: "text/plain" }, { responseType: "text" });
+    return typeof res.data === "string" ? res.data : String(res.data ?? "");
+  } finally {
+    if (tempId) await drive.files.delete({ fileId: tempId, supportsAllDrives: true }).catch(() => {});
+  }
+}
 
 /**
  * Extract a file's readable text, for feeding Drive documents to Cappo as context.
- * Google Docs are exported as text/plain; plain-text/JSON files are read directly.
- * Binary/unsupported types (PDF, images, docx) return "" — callers treat empty as
- * "no extractable text" and move on. Best-effort: never throws for content issues.
+ * Google Docs export as text/plain; plain-text/JSON/XML read directly; Word (.docx/.doc)
+ * and PDF are converted through a temporary Google Doc (see textViaTempDoc). Other
+ * binaries (images, video) return "" — callers treat empty as "no extractable text".
+ * Best-effort: never throws for content issues.
  */
 export async function driveExportText(fileId: string, mimeType?: string): Promise<string> {
   const drive = await client();
@@ -314,6 +342,9 @@ export async function driveExportText(fileId: string, mimeType?: string): Promis
         { responseType: "text" },
       );
       return typeof res.data === "string" ? res.data : String(res.data ?? "");
+    }
+    if (mt === DOCX_MIME || mt === DOC_MIME || mt === PDF_MIME) {
+      return await textViaTempDoc(drive, fileId);
     }
   } catch {
     /* unreadable / export unsupported — treat as no text */

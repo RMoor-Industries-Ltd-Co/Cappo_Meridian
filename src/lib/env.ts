@@ -94,6 +94,11 @@ const schema = z.object({
   // context documents Cappo reads when drafting/briefing. Each entity gets a subfolder
   // here. Unset = a built-in default AMG legal folder id (see grantops/knowledge.ts).
   GRANTOPS_KNOWLEDGE_FOLDER_ID: z.string().optional(),
+  // Optional per-entity Drive folder overrides, as a JSON map of EntityCode → folder id
+  // (e.g. {"RMI":"13cgot…"} to point RMI at its shared RECORDS BOOK folder). Takes
+  // effect unless the entity already has its own knowledgeFolderId set in the UI.
+  // Durable across redeploys (env), unlike the in-memory GrantOps store.
+  GRANTOPS_ENTITY_FOLDERS: z.string().optional(),
 });
 
 const parsed = schema.safeParse(process.env);

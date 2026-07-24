@@ -163,6 +163,17 @@ external automation platform:
    draft section via `driveCreateDoc`, then links the folder's `webViewLink` onto the
    application (`driveFolderUrl`) synchronously — no callback needed.
 
+### Entity knowledge sources (Drive)
+Each entity's context comes from a Drive folder Cappo reads via `readEntityKnowledge`
+(`src/lib/grantops/knowledge.ts`). The folder resolves in priority order: the entity's
+own `knowledgeFolderId` (set on the Entities page, "Drive knowledge folder" field) →
+the `GRANTOPS_ENTITY_FOLDERS` env map (`{"RMI":"<folderId>"}`, durable across redeploys)
+→ else an auto-created `{code} — {name}` subfolder under `GRANTOPS_KNOWLEDGE_FOLDER_ID`.
+This lets e.g. RMI point at its existing shared **RECORDS BOOK** folder. `driveExportText`
+(`connectors/driveFs.ts`) reads Google Docs, text, **and Word/PDF** (`.docx`/`.doc`/`.pdf`
+are converted via a throwaway Google Doc copy — dependency-free). The connected account
+(amg@) needs access to the folder — Editor for the Word/PDF conversion to work.
+
 Everything is **best-effort**: any integration being unconfigured or down never blocks
 the approval (a not-connected Drive logs + no-ops). An `automationFiredAt` guard prevents
 a re-approval from double-scaffolding; `driveEnsureFolder` is idempotent, and the Drive

@@ -87,6 +87,15 @@ export default function EntitiesPage() {
               <label className={txtLabel}>Notes</label>
               <textarea name="notes" rows={2} defaultValue={e.notes ?? ""} className={txtArea} placeholder="Working notes…" />
             </div>
+            <div>
+              <label className={txtLabel}>Drive knowledge folder (link or ID)</label>
+              <input
+                name="knowledgeFolderId"
+                defaultValue={e.knowledgeFolderId ?? ""}
+                className="w-full rounded-md border border-border bg-panel-2 px-3 py-2 text-sm text-fg focus:border-gold/50 focus:outline-none"
+                placeholder="Paste a Drive folder link/ID to point Cappo at an existing folder (e.g. RMI's RECORDS BOOK). Blank = auto folder under the knowledge root."
+              />
+            </div>
             <button className="btn-gold self-start rounded-md px-4 py-2 text-sm font-semibold">Save entity</button>
           </form>
 
