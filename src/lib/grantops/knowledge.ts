@@ -84,9 +84,62 @@ export interface EntityFolder {
 }
 
 /**
- * Resolve the entity's knowledge folder. With an override id (e.g. RMI → the shared
- * RECORDS BOOK folder) Cappo reads THAT folder directly — no create. Otherwise it
- * finds-or-creates a `{code} — {name}` subfolder under the knowledge root.
+ * Normalize a folder/entity name for lenient matching: lowercase, collapse every dash
+ * variant (hyphen, en/em-dash, minus, underscore, slash) and whitespace run to single
+ * spaces, trim. So "GovernanceIQ — GovernanceIQ", "governanceiq - governanceiq", and
+ * "GovernanceIQ_GovernanceIQ" all normalize to "governanceiq governanceiq".
+ */
+export function normalizeFolderName(s: string): string {
+  return s
+    .toLowerCase()
+    .replace(/[‐-―−_\/-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/**
+ * Pick the folder that best matches an entity, tolerant of dash/case/spacing. Ranks:
+ * 3 = normalized title equals the canonical `code — name` / `code name` / `code`;
+ * 2 = title's first token equals the code; 1 = code appears as a token. Among equal
+ * ranks, the most-recently-modified folder wins (the one being actively populated),
+ * which also sidesteps a stale empty duplicate. Returns null if nothing matches.
+ */
+export function matchEntityFolder(folders: DriveItem[], e: EntityProfile): DriveItem | null {
+  const code = normalizeFolderName(e.entityCode);
+  const short = e.shortName || e.entityName;
+  const exact = new Set([
+    normalizeFolderName(`${e.entityCode} — ${short}`),
+    normalizeFolderName(`${e.entityCode} ${short}`),
+    code,
+  ]);
+  let best: DriveItem | null = null;
+  let bestRank = 0;
+  for (const f of folders) {
+    if (!f.isFolder) continue;
+    const t = normalizeFolderName(f.name);
+    const tokens = t.split(" ");
+    let rank = 0;
+    if (exact.has(t)) rank = 3;
+    else if (tokens[0] === code) rank = 2;
+    else if (tokens.includes(code)) rank = 1;
+    if (rank === 0) continue;
+    const newer = best && f.modifiedTime && best.modifiedTime && f.modifiedTime > best.modifiedTime;
+    if (rank > bestRank || (rank === bestRank && newer)) {
+      best = f;
+      bestRank = rank;
+    }
+  }
+  return best;
+}
+
+/**
+ * Resolve the entity's knowledge folder, hardened against a churning Drive tree:
+ *   1. an explicit override id (entity field / Doppler var) — read that folder directly;
+ *   2. else a LENIENT match against the folders already under the knowledge root, so a
+ *      folder named with any dash/case/spacing (e.g. "3E - 3E") still resolves — no
+ *      brittle exact-name dependency, and a freshly-populated folder beats a stale
+ *      empty duplicate;
+ *   3. else create the canonical `code — name` subfolder (first-run behavior).
  */
 export async function resolveEntityFolder(e: EntityProfile): Promise<EntityFolder> {
   const override = entityFolderOverride(e);
@@ -97,7 +150,16 @@ export async function resolveEntityFolder(e: EntityProfile): Promise<EntityFolde
       webViewLink: `https://drive.google.com/drive/folders/${override}`,
     };
   }
-  const folder = await driveEnsureFolder(entityFolderName(e), knowledgeRootId());
+  const root = knowledgeRootId();
+  try {
+    const children = await driveList(root);
+    const match = matchEntityFolder(children, e);
+    if (match) return { id: match.id, name: match.name, webViewLink: match.webViewLink };
+  } catch (err) {
+    if (isNotConnected(err)) throw err; // not connected → let callers degrade gracefully
+    // otherwise (e.g. root not listable) fall through to ensure the canonical folder
+  }
+  const folder = await driveEnsureFolder(entityFolderName(e), root);
   return { id: folder.id, name: folder.name, webViewLink: folder.webViewLink };
 }
 
@@ -133,7 +195,18 @@ const MAX_CHARS = 18_000;
 export async function readEntityKnowledge(e: EntityProfile): Promise<string> {
   try {
     const folder = await resolveEntityFolder(e);
-    const files = (await driveList(folder.id)).filter((f) => !f.isFolder);
+    const top = await driveList(folder.id);
+    const files = top.filter((f) => !f.isFolder);
+    // Shallow one-level descent: also read files sitting inside immediate subfolders,
+    // so docs filed into a "Signed", "2026", etc. subfolder are still ingested.
+    for (const sub of top.filter((f) => f.isFolder)) {
+      if (files.length >= MAX_FILES) break;
+      try {
+        files.push(...(await driveList(sub.id)).filter((f) => !f.isFolder));
+      } catch {
+        /* subfolder not listable — skip */
+      }
+    }
     let out = "";
     for (const f of files.slice(0, MAX_FILES)) {
       if (out.length >= MAX_CHARS) break;
