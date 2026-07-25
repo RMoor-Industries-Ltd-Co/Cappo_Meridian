@@ -31,6 +31,21 @@ services:
       - DATABASE_URL
       - AGENT_API_KEY
       - SECRET_ENCRYPTION_KEY
+      # GrantOps knowledge bank — folder ids come from Doppler; they must be listed
+      # here or docker compose won't forward them into the container (the bug that made
+      # Cappo ignore the Doppler folder ids). Per-entity vars are enumerated per code;
+      # add a new line when a new entity code is introduced.
+      - GRANTOPS_KNOWLEDGE_FOLDER_ID
+      - GRANTOPS_DRIVE_PARENT_FOLDER_ID
+      - GRANTOPS_ENTITY_FOLDERS
+      - GRANTOPS_ENTITY_FOLDER_AMG
+      - GRANTOPS_ENTITY_FOLDER_HVN
+      - GRANTOPS_ENTITY_FOLDER_3E
+      - GRANTOPS_ENTITY_FOLDER_GOVERNANCEIQ
+      - GRANTOPS_ENTITY_FOLDER_RMI
+      - GRANTOPS_ENTITY_FOLDER_RMG
+      - GRANTOPS_ENTITY_FOLDER_RAHMEL
+      - GRANTOPS_ENTITY_FOLDER_HANEEF
     volumes:
       - cappo_data:/data
     expose:
