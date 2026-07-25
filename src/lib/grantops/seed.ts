@@ -88,6 +88,10 @@ const ent = (
 export const SEED_ENTITIES: EntityProfile[] = [
   ent("ent-amg", {
     entityCode: "AMG",
+    summary:
+      "Apex Meridian Group Ltd Co. (AMG) is a Georgia member-managed limited liability company and enterprise-development platform that forms, funds, and governs specialized operating companies through structured partnership. Established in 2026 as an equal (50/50) joint venture between RMoor Industries Ltd Co. and 3E Dynamics Ltd Company, AMG provides the governance framework, capital coordination, and strategic oversight that let each portfolio company pursue its own market while operating under shared standards for ownership, accountability, and continuity. Its developing portfolio includes HVN Global, a curated lifestyle and atmospheric-commerce venture.",
+    bio:
+      "AMG is co-directed by its two member-founders: Rahmel J. Moore (RMoor Industries), an enterprise systems architect and technology executive, and Haneef Elisha (3E Dynamics), a business-architecture and governance-systems specialist. The company operates under a formal operating agreement with defined reserved matters, a buy-sell agreement, a mutual non-disclosure agreement, and a founders-conduct framework — a governance-first structure built for disciplined, auditable decision-making as the portfolio scales.",
     entityName: "Apex Meridian Group",
     entityType: "holding_company",
     legalName: "Apex Meridian Group LLC",
@@ -114,9 +118,13 @@ export const SEED_ENTITIES: EntityProfile[] = [
   }),
   ent("ent-hvn", {
     entityCode: "HVN",
+    summary:
+      "HVN Global LLC is the operating company for HVN — a curated lifestyle and atmospheric-commerce brand centered on men's scent, ambient atmosphere, and personal-environment products, delivered through a design-led e-commerce showroom (the HVN Havenry storefront) at hvnhavenry.com. Operating within Apex Meridian Group's governance structure, HVN Global pairs a distinctive brand world and proprietary product language with a modern direct-to-consumer storefront, positioning it for retail, e-commerce, and digital-readiness funding.",
+    bio:
+      "HVN Global LLC operates the HVN-related business under Apex Meridian Group, whose co-directors lead its organizational design, brand architecture, and commercialization strategy. The company is built around intentional living through refined environments and premium atmospheric products, supported by a governance-backed operating structure designed for sustainable expansion, licensing, and long-term growth.",
     entityName: "HVN Havenry",
     entityType: "operating_company",
-    legalName: "HVN Havenry LLC",
+    legalName: "HVN Global LLC",
     shortName: "HVN",
     description:
       "Retail / e-commerce home-atmosphere brand (candles, incense, home goods). Strongest fit for small-business, retail, and digital-readiness grants.",
@@ -141,6 +149,10 @@ export const SEED_ENTITIES: EntityProfile[] = [
   }),
   ent("ent-3e", {
     entityCode: "3E",
+    summary:
+      "3E Dynamics Ltd Company is a Georgia technology and business-architecture company (Snellville, GA) that designs governance systems, organizational architecture, brand-identity and proprietary-language frameworks, and the intellectual property that powers its operating ventures. 3E is the parent of GovernanceIQ Technologies LLC and an equal (50%) co-owner of Apex Meridian Group. Its governance-first, systems-engineering approach — turning business and compliance requirements into structured, licensable frameworks — makes it a strong candidate for deep-technology and non-dilutive R&D funding.",
+    bio:
+      "3E Dynamics is founded and solely owned by Haneef Elisha, who serves as its principal. His work sits at the intersection of business architecture and creative systems: he develops governance and operating frameworks alongside proprietary brand ecosystems, designing not only how organizations operate but how they communicate, differentiate, and scale. 3E develops core intellectual property — frameworks, assessment architectures, and nomenclature systems — that it licenses to subsidiaries such as GovernanceIQ.",
     entityName: "3E Dynamics",
     entityType: "operating_company",
     legalName: "3E Dynamics LLC",
@@ -167,6 +179,10 @@ export const SEED_ENTITIES: EntityProfile[] = [
   }),
   ent("ent-giq", {
     entityCode: "GovernanceIQ",
+    summary:
+      "GovernanceIQ Technologies LLC (established 2026, Georgia; NAICS 541512) is an emerging software company and subsidiary of 3E Dynamics, building GovernanceIQ — an AI-assisted governance-operations SaaS platform that transforms fragmented governance, risk, and compliance requirements into structured workflows, actionable intelligence, and business-ready outputs. The platform interprets and normalizes requirements across multiple frameworks (HIPAA, NIST SP 800-53, PCI DSS, SOC 2, ISO 27001), maps them to operational controls, and generates human-reviewed governance workflow objects within a secure, cloud-native, multi-tenant architecture. Current status: concept validated, platform architecture defined, commercialization pathway established, with an NSF SBIR Phase I research prototype in preparation.",
+    bio:
+      "GovernanceIQ is founder-led by Haneef Elisha, with expertise in business systems design, governance frameworks, and technology development. The company commercializes proprietary software, frameworks, and methodologies under an exclusive licensing structure from its parent, 3E Dynamics, and targets small and mid-sized businesses, government contractors, regulated industries, and GRC and cybersecurity consultants.",
     entityName: "GovernanceIQ",
     entityType: "operating_company",
     legalName: "GovernanceIQ LLC",
@@ -193,6 +209,10 @@ export const SEED_ENTITIES: EntityProfile[] = [
   }),
   ent("ent-rmi", {
     entityCode: "RMI",
+    summary:
+      "RMoor Industries Ltd Co. (RMI) is a Georgia-based holding and strategic-management company (Villa Rica, GA) that acquires, develops, finances, governs, and protects a diversified portfolio of operating companies, intellectual property, and software platforms. RMI functions as the enterprise governance authority for its portfolio — responsible for capital stewardship, corporate compliance, intellectual-property oversight, enterprise architecture, technology strategy, and organizational continuity — enabling each subsidiary to keep its own market identity within a unified governance framework. RMI is the parent of Renaissance Masters Group and an equal (50%) co-owner of Apex Meridian Group.",
+    bio:
+      "RMI is founded and led by Rahmel J. Moore, its Managing Director, an enterprise systems architect and technology executive with more than two decades architecting complex business and technology ecosystems. He built RMI as a centralized management organization — more than a passive holding company — applying a governance-first, systems-engineering methodology that combines structured corporate documentation, operating policies, intellectual-property governance, and digital-asset management into a cohesive framework capable of scaling across multiple companies simultaneously.",
     entityName: "RMoor Industries",
     entityType: "operating_company",
     legalName: "RMoor Industries Ltd. Co.",
@@ -218,6 +238,10 @@ export const SEED_ENTITIES: EntityProfile[] = [
   }),
   ent("ent-rmg", {
     entityCode: "RMG",
+    summary:
+      "Renaissance Masters Group LC (RMG) is the creative-media, publishing, education, coaching, and intellectual-property company within RMoor Industries. RMG develops books, curricula, digital learning experiences, podcasts, multimedia productions, and software-enabled content focused on leadership, mastery, relationships, legacy, and intentional living. Its portfolio of initiatives includes Connection Circle (a relationship-intelligence application), Story Director (a content-operations platform), and Master Atelier / RMG Creator OS (an AI-assisted creator operating system), positioning RMG for creative, media, and content-focused funding.",
+    bio:
+      "RMG is founded and led by Rahmel J. Moore as its executive architect. It serves as the operating home for original intellectual property developed under the Renaissance Masters and Coach Rahm brands, transforming experience and expertise into durable, protectable, and licensable creative assets — books, applications, learning systems, podcasts, and content properties — built for long-term audience and educational impact.",
     entityName: "RMG (Creator OS)",
     entityType: "operating_company",
     legalName: "RMG",
@@ -243,6 +267,10 @@ export const SEED_ENTITIES: EntityProfile[] = [
   }),
   ent("ent-rahmel", {
     entityCode: "Rahmel",
+    summary:
+      "Rahmel J. Moore is an enterprise systems architect, technology executive, author, and multi-company founder. He is the Founder and Managing Director of RMoor Industries Ltd Co., the founder and executive architect of Renaissance Masters Group, and a Co-Director of Apex Meridian Group — building integrated enterprise ecosystems that unite governance, technology, media, and intellectual property.",
+    bio:
+      "Rahmel J. Moore is the Founder and Managing Director of RMoor Industries Ltd Co., through which he governs a portfolio spanning creative media, publishing, education, software, and intellectual property. Professionally, he serves as a Lead Customer Data Platform Data Architect (Bounteous), specializing in Adobe Experience Platform, Real-Time CDP, Customer Journey Analytics, Adobe Journey Optimizer, Web SDK, identity resolution, and enterprise data governance for Fortune 500 and national financial organizations. His background includes formal study in electrical engineering technology, automation, and robotics, together with software engineering across Python, cloud infrastructure, APIs, and applied AI. His leadership philosophy emphasizes intentional design, documented authority, ethical stewardship, and the creation of assets and institutions that produce value across generations. Based in Villa Rica, Georgia.",
     entityName: "Rahmel Moore",
     entityType: "founder",
     legalName: "Rahmel Moore",
@@ -268,6 +296,10 @@ export const SEED_ENTITIES: EntityProfile[] = [
   }),
   ent("ent-haneef", {
     entityCode: "Haneef",
+    summary:
+      "Haneef Elisha is a business-systems architect and governance specialist, and the founder and principal of 3E Dynamics Ltd Company and its subsidiary GovernanceIQ Technologies LLC. He is a co-member and Co-Director of Apex Meridian Group and serves as Co-Director of Operations and Governance for HVN Global — working at the intersection of business architecture, governance systems, and proprietary brand-language design.",
+    bio:
+      "Haneef Elisha is the founder and principal of 3E Dynamics, the parent company of GovernanceIQ Technologies, and a co-founder of Apex Meridian Group. His work integrates business architecture and creative systems: he develops governance and operating frameworks alongside proprietary brand ecosystems, designing not only how organizations operate but how they communicate, differentiate, and scale. His focus areas include business systems design, governance and operating frameworks, organizational architecture, intellectual-property strategy, brand-language development, proprietary nomenclature and internal lexicons, experience design, and long-term commercial infrastructure. Based in the Snellville, Georgia area.",
     entityName: "Haneef Elisha",
     entityType: "founder",
     legalName: "Haneef Elisha",
