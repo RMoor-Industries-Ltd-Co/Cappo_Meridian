@@ -119,12 +119,12 @@ export const SEED_ENTITIES: EntityProfile[] = [
   ent("ent-hvn", {
     entityCode: "HVN",
     summary:
-      "HVN is a curated lifestyle and atmospheric-commerce brand centered on men's scent, ambient atmosphere, and personal-environment products, delivered through a design-led e-commerce showroom at hvnhavenry.com. Operating within Apex Meridian Group's governance structure, HVN pairs a distinctive brand world and proprietary product language with a modern direct-to-consumer storefront, positioning it for retail, e-commerce, and digital-readiness funding.",
+      "HVN Global LLC is the operating company for HVN — a curated lifestyle and atmospheric-commerce brand centered on men's scent, ambient atmosphere, and personal-environment products, delivered through a design-led e-commerce showroom (the HVN Havenry storefront) at hvnhavenry.com. Operating within Apex Meridian Group's governance structure, HVN Global pairs a distinctive brand world and proprietary product language with a modern direct-to-consumer storefront, positioning it for retail, e-commerce, and digital-readiness funding.",
     bio:
-      "HVN is developed under Apex Meridian Group, whose co-directors lead its organizational design, brand architecture, and commercialization strategy. The brand is built around intentional living through refined environments and premium atmospheric products, supported by a governance-backed operating structure designed for sustainable expansion, licensing, and long-term growth.",
+      "HVN Global LLC operates the HVN-related business under Apex Meridian Group, whose co-directors lead its organizational design, brand architecture, and commercialization strategy. The company is built around intentional living through refined environments and premium atmospheric products, supported by a governance-backed operating structure designed for sustainable expansion, licensing, and long-term growth.",
     entityName: "HVN Havenry",
     entityType: "operating_company",
-    legalName: "HVN Havenry LLC",
+    legalName: "HVN Global LLC",
     shortName: "HVN",
     description:
       "Retail / e-commerce home-atmosphere brand (candles, incense, home goods). Strongest fit for small-business, retail, and digital-readiness grants.",
