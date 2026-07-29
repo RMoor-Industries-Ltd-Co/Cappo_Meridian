@@ -70,6 +70,11 @@ export interface FundingOpportunity {
   mbeCertificationRequired: TriState;
 
   requiredDocuments: DocumentType[];
+  // Application mechanics — how you actually apply (powers the guided flow + the
+  // screenshot assistant). applicationQuestions are the funder's KNOWN open-ended
+  // prompts, if any; Cappo pre-drafts answers to them ahead of time.
+  applicationQuestions?: string[];
+  externalAccountRequired?: boolean; // must create an account on the funder site first
   applicationUrl?: string;
   sourceUrl?: string;
   verificationDate?: string | null;
@@ -186,13 +191,42 @@ export interface ChecklistItem {
   done: boolean;
 }
 
+/** One question on a grant application and Cappo's draft answer for founder review. */
+export interface ApplicationQuestionAnswer {
+  id: string;
+  question: string;
+  answer: string;
+  approved: boolean; // a founder has reviewed + accepted this answer
+}
+
+/**
+ * One "page" of a grant application in the guided assistant. It comes either from a
+ * screenshot the founder uploaded (Cappo reads the image, extracts the questions, and
+ * drafts answers) or from the opportunity's known applicationQuestions. The screenshot
+ * itself is saved into a Screenshots subfolder of the grant's Drive folder.
+ */
+export interface ApplicationPage {
+  id: string;
+  index: number; // 1-based page order in the application
+  label?: string;
+  source: "screenshot" | "known_questions";
+  screenshotFileId?: string | null;
+  screenshotUrl?: string | null;
+  questions: ApplicationQuestionAnswer[];
+  createdAt: string;
+}
+
 export interface GrantApplication {
   id: string;
   fundingOpportunityId: string;
   applicantEntity: EntityCode;
   applicationStatus: ApplicationStatus;
   driveFolderUrl?: string | null;
+  driveFolderId?: string | null; // the grant folder's Drive id (assistant nests into it)
+  screenshotsFolderId?: string | null; // "Screenshots" subfolder id (created on first upload)
   applicationChecklist: ChecklistItem[];
+  // The guided, page-by-page application assistant: each page's questions + draft answers.
+  applicationPages?: ApplicationPage[];
   narrativeDraft?: string;
   founderBioDraft?: string;
   businessSummaryDraft?: string;

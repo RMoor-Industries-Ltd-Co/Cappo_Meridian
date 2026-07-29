@@ -10,8 +10,11 @@ import {
 import { riskFlags, type FundingOpportunity } from "@/lib/grantops/types";
 import {
   cappoDecisionAction,
+  updateOpportunityMetaAction,
   updateOpportunityScoresAction,
 } from "@/lib/grantops/actions";
+import { Breadcrumbs } from "@/components/grantops/Breadcrumbs";
+import { ProcessStepper } from "@/components/grantops/ProcessStepper";
 import {
   CappoBadge,
   Pill,
@@ -54,7 +57,13 @@ export default async function OpportunityDetailPage({ params }: { params: Promis
   return (
     <div className="flex flex-col gap-5">
       <div className="flex flex-col gap-2">
-        <Link href="/grantops/opportunities" className="text-xs text-subtle hover:text-fg">← All opportunities</Link>
+        <Breadcrumbs
+          items={[
+            { label: "Funding Command Center", href: "/grantops" },
+            { label: "Opportunities", href: "/grantops/opportunities" },
+            { label: o.opportunityName },
+          ]}
+        />
         <div className="flex flex-wrap items-center gap-3">
           <h2 className="text-xl font-semibold text-fg">{o.opportunityName}</h2>
           <RecommendationBadge value={o.recommendation} />
@@ -70,6 +79,12 @@ export default async function OpportunityDetailPage({ params }: { params: Promis
         <Card className="p-4"><div className="text-xs text-subtle">Best applicant</div><div className="text-lg font-semibold text-fg">{o.bestApplicantEntity}</div></Card>
         <Card className="p-4"><div className="text-xs text-subtle">Award type</div><div className="text-lg font-semibold text-fg capitalize">{o.awardType.replace(/_/g, " ")}</div></Card>
       </div>
+
+      <Card className="p-5">
+        <SectionTitle title="How to apply" />
+        <p className="mb-3 text-xs text-subtle">The numbered path from briefing to submission — each step links to where it happens.</p>
+        <ProcessStepper opp={o} app={app ?? undefined} />
+      </Card>
 
       <Card gold className="p-5">
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
@@ -214,6 +229,37 @@ export default async function OpportunityDetailPage({ params }: { params: Promis
           </form>
         </Card>
       </div>
+
+      {/* Application mechanics — feeds the guided flow + assistant */}
+      <Card className="p-5">
+        <SectionTitle title="Application mechanics" />
+        <p className="mb-3 text-xs text-subtle">
+          How this grant is actually submitted. Known questions here let Cappo pre-draft answers before you open the
+          portal; the assistant on the workspace handles screenshot-driven pages for anything not known ahead of time.
+        </p>
+        <form action={updateOpportunityMetaAction} className="flex flex-col gap-3">
+          <input type="hidden" name="id" value={o.id} />
+          <label className="inline-flex items-center gap-2 text-sm text-fg">
+            <input type="checkbox" name="externalAccountRequired" defaultChecked={o.externalAccountRequired ?? false} className="accent-[var(--gold)]" />
+            Requires creating an account on the funder&rsquo;s site before applying
+          </label>
+          <div>
+            <label className={labelCls}>Application URL</label>
+            <input name="applicationUrl" type="url" defaultValue={o.applicationUrl ?? ""} className={field} placeholder="https://…" />
+          </div>
+          <div>
+            <label className={labelCls}>Known application questions (one per line)</label>
+            <textarea
+              name="applicationQuestions"
+              rows={5}
+              defaultValue={(o.applicationQuestions ?? []).join("\n")}
+              className={field}
+              placeholder={"Describe your business.\nWhat will you use the funds for?\nWhat impact will this grant have?"}
+            />
+          </div>
+          <button className="btn-gold self-start rounded-md px-4 py-2 text-sm font-semibold">Save mechanics</button>
+        </form>
+      </Card>
 
       {/* Application workspace */}
       <Card className="p-5">
