@@ -160,8 +160,10 @@ external automation platform:
 3. **Creates the Google Drive workspace** (`createDriveWorkspace`) using the shared
    Google connection (`src/lib/connectors/driveFs.ts`): `driveEnsureFolder`
    (search-or-create under `GRANTOPS_DRIVE_PARENT_FOLDER_ID`) + a blank Google Doc per
-   draft section via `driveCreateDoc`, then links the folder's `webViewLink` onto the
-   application (`driveFolderUrl`) synchronously — no callback needed.
+   **required document** via `driveCreateDoc` (derived per funder from the opportunity's
+   `requiredDocuments`, so the workspace mirrors exactly what that funder asks for — not
+   a fixed superset), then links the folder's `webViewLink` onto the application
+   (`driveFolderUrl`) synchronously — no callback needed.
 
 ### Entity knowledge sources (Drive)
 Each entity's context comes from a Drive folder Cappo reads via `readEntityKnowledge`

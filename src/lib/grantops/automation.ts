@@ -24,18 +24,25 @@ import type { FundingOpportunity, GrantApplication } from "./types";
 const GRANTOPS_TAG = "grantops";
 
 /**
- * The draft Google Docs created inside the grant folder — the "draft workspace."
- * Ordered to mirror a real application's build sequence; each becomes one blank Doc.
+ * The draft Google Docs created inside the grant folder are derived per funder from
+ * the opportunity's own `requiredDocuments`, so the workspace mirrors EXACTLY what
+ * this funder asks for (e.g. Skip → Business summary, Founder bio, Use of funds)
+ * rather than a fixed superset. Labels come from DOCUMENT_LABELS (same names the
+ * in-app checklist and the ClickUp "Gather" tasks use), deduped, order preserved.
+ * A funder with no required documents on file yields no draft docs — the folder and
+ * the checklist still exist.
  */
-const DRAFT_DOC_SECTIONS = [
-  "Narrative",
-  "Founder Bio",
-  "Business Summary",
-  "Project Summary",
-  "Use of Funds",
-  "Budget Narrative",
-  "Impact Statement",
-] as const;
+function draftDocSections(opp: FundingOpportunity): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const dt of opp.requiredDocuments) {
+    const label = DOCUMENT_LABELS[dt] ?? dt;
+    if (seen.has(label)) continue;
+    seen.add(label);
+    out.push(label);
+  }
+  return out;
+}
 
 /** The grant folder's name — stable so re-approval resolves the same folder. */
 function folderName(opp: FundingOpportunity): string {
@@ -57,9 +64,10 @@ export async function createDriveWorkspace(
     const parentId = env.GRANTOPS_DRIVE_PARENT_FOLDER_ID || "root";
     const folder = await driveEnsureFolder(folderName(opp), parentId);
 
-    // Draft docs in parallel; a single doc failing must not sink the rest.
+    // Draft docs, tailored to THIS funder's required documents, in parallel; a single
+    // doc failing must not sink the rest.
     await Promise.all(
-      DRAFT_DOC_SECTIONS.map((section) =>
+      draftDocSections(opp).map((section) =>
         driveCreateDoc(section, folder.id).catch((err) => {
           console.error(
             "[grantops] draft doc failed:",
