@@ -13,6 +13,9 @@ import {
 } from "@/lib/grantops/actions";
 import { isAiConfigured } from "@/lib/env";
 import { Pill, money } from "@/components/grantops/badges";
+import { Breadcrumbs } from "@/components/grantops/Breadcrumbs";
+import { ProcessStepper } from "@/components/grantops/ProcessStepper";
+import { ApplicationAssistant } from "@/components/grantops/ApplicationAssistant";
 
 export const dynamic = "force-dynamic";
 
@@ -45,7 +48,13 @@ export default async function ApplicationWorkspacePage({ params }: { params: Pro
   return (
     <div className="flex flex-col gap-5">
       <div className="flex flex-col gap-1">
-        <Link href="/grantops/applications" className="text-xs text-subtle hover:text-fg">← All applications</Link>
+        <Breadcrumbs
+          items={[
+            { label: "Funding Command Center", href: "/grantops" },
+            ...(o ? [{ label: "Opportunities", href: "/grantops/opportunities" }, { label: o.opportunityName, href: `/grantops/opportunities/${o.id}` }] : [{ label: "Applications", href: "/grantops/applications" }]),
+            { label: "Workspace" },
+          ]}
+        />
         <div className="flex flex-wrap items-center gap-3">
           <h2 className="text-xl font-semibold text-fg">{o?.opportunityName ?? a.fundingOpportunityId}</h2>
           <Pill tone="info">{a.applicationStatus.replace(/_/g, " ")}</Pill>
@@ -69,6 +78,14 @@ export default async function ApplicationWorkspacePage({ params }: { params: Pro
           </p>
         )}
       </div>
+
+      {o && (
+        <Card className="p-5">
+          <SectionTitle title="Application process" />
+          <p className="mb-3 text-xs text-subtle">Where this application stands and what&rsquo;s next.</p>
+          <ProcessStepper opp={o} app={a} />
+        </Card>
+      )}
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {/* Checklist */}
@@ -220,6 +237,19 @@ export default async function ApplicationWorkspacePage({ params }: { params: Pro
             <button className="btn-gold rounded-md px-4 py-2 text-sm font-semibold">Save drafts</button>
           </div>
         </form>
+      </Card>
+
+      {/* Guided, page-by-page application assistant */}
+      <Card className="p-5">
+        <SectionTitle title="Application assistant (screenshot → questions → draft answers)" />
+        <div className="mt-3">
+          <ApplicationAssistant
+            appId={a.id}
+            aiOn={aiOn}
+            hasKnownQuestions={Boolean(o?.applicationQuestions?.length)}
+            pages={a.applicationPages ?? []}
+          />
+        </div>
       </Card>
     </div>
   );

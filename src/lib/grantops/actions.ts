@@ -13,17 +13,23 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import {
+  addApplicationPage,
   approveApplication,
+  collectPriorApplicationCopy,
   createApplication,
   createDocument,
   createOpportunity,
   getApplication,
   getEntityByCode,
   getOpportunity,
+  newPageId,
+  newQuestionId,
   recordCappoDecision,
   recordSubmission,
+  removeApplicationPage,
   toggleChecklistItem,
   updateApplication,
+  updateApplicationAnswer,
   updateDocument,
   updateEntity,
   updateOpportunity,
@@ -32,6 +38,12 @@ import { createDeadlineTasksForApplication, createDriveWorkspace } from "./autom
 import { DRAFT_FIELD_SET, DRAFT_SECTIONS, buildDraftPrompt } from "./drafting";
 import { buildBriefingPrompt } from "./briefing";
 import { parseFolderId, readEntityKnowledge } from "./knowledge";
+import {
+  analyzeScreenshotToQA,
+  draftAnswersForKnownQuestions,
+  normalizeImageMediaType,
+} from "./applicationAssistant";
+import { driveEnsureFolder, driveUpload, isNotConnected } from "@/lib/connectors/driveFs";
 import { isAiConfigured } from "@/lib/env";
 import { runCappoAgent } from "@/lib/agent";
 import type {
@@ -298,6 +310,143 @@ export async function generateAllDraftsAction(form: FormData) {
     }),
   );
   revalidatePath(`${B}/applications/${id}`);
+}
+
+// ─── Application assistant (guided, page-by-page Q&A) ─────────────────────────
+
+/**
+ * Analyze an uploaded screenshot of one grant-application page: save the image into a
+ * Screenshots subfolder of the grant's Drive folder (best-effort), then have Cappo read
+ * the image, extract its questions, and draft answers — grounded in the entity's Drive
+ * knowledge AND previously-written grant copy, governed by THIS grant's metadata. The
+ * page (questions + draft answers) is appended for founder review. Nothing is submitted.
+ */
+export async function analyzeApplicationScreenshotAction(form: FormData) {
+  const id = str(form.get("id"));
+  if (!id) return;
+  const app = getApplication(id);
+  const opp = app ? getOpportunity(app.fundingOpportunityId) : undefined;
+  if (!app || !opp) return;
+
+  const file = form.get("screenshot");
+  if (!(file instanceof File) || file.size === 0) return;
+  const mediaType = normalizeImageMediaType(file.type);
+  if (!mediaType) return; // unsupported image type
+  const buf = Buffer.from(await file.arrayBuffer());
+  const base64 = buf.toString("base64");
+  const label = str(form.get("label"));
+
+  // Best-effort: save the screenshot into a Screenshots subfolder of the grant folder.
+  let screenshotFileId: string | null = null;
+  let screenshotUrl: string | null = null;
+  const grantFolderId = app.driveFolderId ?? parseFolderId(app.driveFolderUrl);
+  if (grantFolderId) {
+    try {
+      let shotsId = app.screenshotsFolderId ?? null;
+      if (!shotsId) {
+        const folder = await driveEnsureFolder("Screenshots", grantFolderId);
+        shotsId = folder.id;
+        updateApplication(id, { screenshotsFolderId: shotsId });
+      }
+      const pageNo = (app.applicationPages?.length ?? 0) + 1;
+      const ext = mediaType.split("/")[1];
+      const safeLabel = label ? `-${label.replace(/[^\w-]+/g, "_")}` : "";
+      const name = `page-${String(pageNo).padStart(2, "0")}${safeLabel}.${ext}`;
+      const up = await driveUpload(shotsId, name, mediaType, buf);
+      screenshotFileId = up.id;
+      screenshotUrl = up.webViewLink ?? null;
+    } catch (e) {
+      if (!isNotConnected(e)) {
+        console.error("[grantops] screenshot upload failed:", e instanceof Error ? e.message : e);
+      }
+    }
+  }
+
+  // Analyze (uses the uploaded bytes directly — independent of Drive storage).
+  const entity = getEntityByCode(app.applicantEntity);
+  const knowledge = entity ? await readEntityKnowledge(entity) : "";
+  const priorCopy = collectPriorApplicationCopy(app.id);
+  const qa = await analyzeScreenshotToQA(base64, mediaType, { opp, entity, knowledge, priorCopy });
+
+  addApplicationPage(id, {
+    id: newPageId(),
+    label,
+    source: "screenshot",
+    screenshotFileId,
+    screenshotUrl,
+    questions: qa.map((q) => ({ id: newQuestionId(), question: q.question, answer: q.answer, approved: false })),
+    createdAt: new Date().toISOString(),
+  });
+  revalidatePath(`${B}/applications/${id}`);
+}
+
+/**
+ * Draft answers to the opportunity's KNOWN questions (applicationQuestions) ahead of
+ * time — no screenshot needed — and append them as a page for founder review.
+ */
+export async function draftKnownQuestionsAction(form: FormData) {
+  const id = str(form.get("id"));
+  if (!id) return;
+  const app = getApplication(id);
+  const opp = app ? getOpportunity(app.fundingOpportunityId) : undefined;
+  if (!app || !opp) return;
+  const questions = opp.applicationQuestions ?? [];
+  if (questions.length === 0) return;
+
+  const entity = getEntityByCode(app.applicantEntity);
+  const knowledge = entity ? await readEntityKnowledge(entity) : "";
+  const priorCopy = collectPriorApplicationCopy(app.id);
+  const qa = await draftAnswersForKnownQuestions(questions, { opp, entity, knowledge, priorCopy });
+  if (qa.length === 0) return;
+
+  addApplicationPage(id, {
+    id: newPageId(),
+    label: "Known questions",
+    source: "known_questions",
+    screenshotFileId: null,
+    screenshotUrl: null,
+    questions: qa.map((q) => ({ id: newQuestionId(), question: q.question, answer: q.answer, approved: false })),
+    createdAt: new Date().toISOString(),
+  });
+  revalidatePath(`${B}/applications/${id}`);
+}
+
+/** Save a founder's edit to one assistant answer, and its approved state. */
+export async function updateApplicationAnswerAction(form: FormData) {
+  const id = str(form.get("id"));
+  const pageId = str(form.get("pageId"));
+  const questionId = str(form.get("questionId"));
+  if (!id || !pageId || !questionId) return;
+  const answerRaw = form.get("answer");
+  const answer = typeof answerRaw === "string" ? answerRaw : "";
+  const approved = form.get("approved") === "on";
+  updateApplicationAnswer(id, pageId, questionId, { answer, approved });
+  revalidatePath(`${B}/applications/${id}`);
+}
+
+/** Remove an assistant page (e.g. a bad screenshot analysis). */
+export async function removeApplicationPageAction(form: FormData) {
+  const id = str(form.get("id"));
+  const pageId = str(form.get("pageId"));
+  if (!id || !pageId) return;
+  removeApplicationPage(id, pageId);
+  revalidatePath(`${B}/applications/${id}`);
+}
+
+/** Edit an opportunity's application mechanics (known questions, account-required, URL). */
+export async function updateOpportunityMetaAction(form: FormData) {
+  const id = str(form.get("id"));
+  if (!id) return;
+  const patch: Partial<FundingOpportunity> = {
+    externalAccountRequired: form.get("externalAccountRequired") === "on",
+  };
+  const qraw = form.get("applicationQuestions");
+  if (typeof qraw === "string") {
+    patch.applicationQuestions = qraw.split("\n").map((s) => s.trim()).filter(Boolean);
+  }
+  patch.applicationUrl = str(form.get("applicationUrl"));
+  updateOpportunity(id, patch);
+  revalidatePath(`${B}/opportunities/${id}`);
 }
 
 // ─── Pre-application briefing ─────────────────────────────────────────────────

@@ -189,6 +189,24 @@ My Drive root. Requires Cappo's Google connector to be connected (Settings → I
 > Cappo already owns every Drive/ClickUp primitive, making it simpler, synchronous, and
 > free of webhook/callback fragility.
 
+### Guided application assistant (screenshots → questions → draft answers)
+The application workspace (`applications/[id]`) has a numbered process stepper
+(`ProcessStepper`) and a page-by-page assistant (`ApplicationAssistant` +
+`src/lib/grantops/applicationAssistant.ts`). A founder uploads a screenshot of each real
+application page and presses **Analyze**: Cappo reads the image (vision, `claude-opus-4-8`),
+extracts every question, and drafts an answer to each — grounded in the applicant entity's
+Drive knowledge (`readEntityKnowledge`), its Summary/Bio, and **previously-written grant copy
+across all applications** (`collectPriorApplicationCopy`), all governed by the current
+grant's metadata. Screenshots are saved into a `Screenshots` subfolder of the grant's Drive
+folder (`analyzeApplicationScreenshotAction`, best-effort). If a grant's questions are known
+ahead of time (`FundingOpportunity.applicationQuestions`, edited via `updateOpportunityMetaAction`
+on the opportunity page), `draftKnownQuestionsAction` pre-drafts answers with no screenshot.
+Every answer is a **draft for founder review** (`updateApplicationAnswerAction`, per-answer
+approve) — nothing is ever auto-submitted. Pages/answers live on `GrantApplication.applicationPages`
+(in-memory, resets on redeploy like the rest of the store; the Drive screenshots are the durable
+record). Breadcrumbs (`Breadcrumbs`) link opportunity ↔ briefing ↔ workspace so no sub-page is a
+dead-end.
+
 ## PIAAR initiatives — Cappo's one permitted GitHub write
 
 `add_initiative` (`src/lib/agent.ts` + `src/lib/githubApp.ts`) appends a new row to

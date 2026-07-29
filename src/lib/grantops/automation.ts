@@ -78,7 +78,10 @@ export async function createDriveWorkspace(
       ),
     );
 
-    if (folder.webViewLink) updateApplication(app.id, { driveFolderUrl: folder.webViewLink });
+    updateApplication(app.id, {
+      driveFolderId: folder.id,
+      ...(folder.webViewLink ? { driveFolderUrl: folder.webViewLink } : {}),
+    });
     return folder.webViewLink ?? null;
   } catch (err) {
     if (isNotConnected(err)) {

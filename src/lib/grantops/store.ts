@@ -16,6 +16,8 @@ import {
   computeFinalPriority,
   daysUntil,
   riskFlags,
+  type ApplicationPage,
+  type ApplicationQuestionAnswer,
   type CappoDecision,
   type FundingOpportunity,
   type EntityProfile,
@@ -258,11 +260,14 @@ export function createApplication(oppId: string): GrantApplication | undefined {
     applicantEntity: o.bestApplicantEntity,
     applicationStatus: "workspace_created",
     driveFolderUrl: null,
+    driveFolderId: null,
+    screenshotsFolderId: null,
     applicationChecklist: o.requiredDocuments.map((dt) => ({
       documentType: dt,
       label: DOCUMENT_LABELS[dt] ?? dt,
       done: false,
     })),
+    applicationPages: [],
     humanApprovalRequired: true,
     approvedBy: null,
     submittedBy: null,
@@ -288,6 +293,93 @@ export function updateApplication(
   Object.assign(a, patch);
   a.updatedAt = stamp();
   return a;
+}
+
+// ─── Application assistant (guided, page-by-page Q&A) ────────────────────────
+
+/** A stable id for an application page / question, monotonic like the rest of the store. */
+export function newPageId(): string {
+  return nextId("page");
+}
+export function newQuestionId(): string {
+  return nextId("q");
+}
+
+/** Append a page (from a screenshot or the known questions) to an application. */
+export function addApplicationPage(
+  appId: string,
+  page: Omit<ApplicationPage, "index">,
+): ApplicationPage | undefined {
+  const a = getApplication(appId);
+  if (!a) return undefined;
+  const pages = a.applicationPages ?? (a.applicationPages = []);
+  const full: ApplicationPage = { ...page, index: pages.length + 1 };
+  pages.push(full);
+  a.updatedAt = stamp();
+  return full;
+}
+
+/** Update one answer (edit text / approve) within a page. Returns the updated app. */
+export function updateApplicationAnswer(
+  appId: string,
+  pageId: string,
+  questionId: string,
+  patch: Partial<Pick<ApplicationQuestionAnswer, "answer" | "approved">>,
+): GrantApplication | undefined {
+  const a = getApplication(appId);
+  const page = a?.applicationPages?.find((p) => p.id === pageId);
+  const q = page?.questions.find((x) => x.id === questionId);
+  if (!a || !q) return undefined;
+  if (patch.answer !== undefined) q.answer = patch.answer;
+  if (patch.approved !== undefined) q.approved = patch.approved;
+  a.updatedAt = stamp();
+  return a;
+}
+
+/** Remove a page (and re-number the rest) from an application. */
+export function removeApplicationPage(appId: string, pageId: string): void {
+  const a = getApplication(appId);
+  if (!a?.applicationPages) return;
+  a.applicationPages = a.applicationPages.filter((p) => p.id !== pageId);
+  a.applicationPages.forEach((p, i) => (p.index = i + 1));
+  a.updatedAt = stamp();
+}
+
+/**
+ * Gather previously-written grant copy across ALL applications (draft sections plus
+ * answered assistant pages), excluding the current one, as a capped reference corpus.
+ * Feeds the assistant so new answers reuse proven language while the CURRENT grant's
+ * metadata still governs. Approved answers are preferred and labeled as such.
+ */
+export function collectPriorApplicationCopy(excludeAppId?: string, maxChars = 12_000): string {
+  const out: string[] = [];
+  for (const app of state().applications) {
+    if (app.id === excludeAppId) continue;
+    const opp = getOpportunity(app.fundingOpportunityId);
+    const header = `# ${opp?.opportunityName ?? app.fundingOpportunityId} (${app.applicantEntity})`;
+    const parts: string[] = [];
+    const drafts: [string, string | undefined][] = [
+      ["Business summary", app.businessSummaryDraft],
+      ["Project narrative", app.narrativeDraft],
+      ["Use of funds", app.useOfFundsDraft],
+      ["Budget narrative", app.budgetNarrativeDraft],
+      ["Impact statement", app.impactStatementDraft],
+      ["Founder bio", app.founderBioDraft],
+    ];
+    for (const [label, text] of drafts) {
+      if (text && text.trim()) parts.push(`## ${label}\n${text.trim()}`);
+    }
+    for (const page of app.applicationPages ?? []) {
+      for (const q of page.questions) {
+        if (q.answer && q.answer.trim()) {
+          parts.push(`## Q: ${q.question}\n${q.approved ? "(approved) " : ""}${q.answer.trim()}`);
+        }
+      }
+    }
+    if (parts.length) out.push(`${header}\n${parts.join("\n\n")}`);
+  }
+  const joined = out.join("\n\n---\n\n");
+  return joined.length > maxChars ? joined.slice(0, maxChars) : joined;
 }
 
 export function toggleChecklistItem(appId: string, documentType: string, done: boolean) {
