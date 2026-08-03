@@ -229,6 +229,74 @@ export async function createCapture(input: {
   } as CreateArgs);
 }
 
+/**
+ * Log a decision in the Decisions Log.
+ *
+ * Property names mirror `getRecentDecisions` (title is "Decision"). Anything
+ * whose property name isn't independently confirmed goes into the page BODY
+ * rather than a guessed property — a wrong property name fails the write, and a
+ * silently dropped field is worse than a visible paragraph.
+ */
+export async function createDecision(input: {
+  decision: string;
+  status?: string;
+  date?: string;
+  /** Free-form provenance written into the page body. */
+  context?: string;
+}): Promise<void> {
+  const props: Record<string, unknown> = {
+    Decision: { title: [{ text: { content: input.decision } }] },
+  };
+  if (input.status) props.Status = { select: { name: input.status } };
+  if (input.date) props.Date = { date: { start: input.date } };
+
+  await getClient().pages.create({
+    parent: { type: "data_source_id", data_source_id: NOTION_DS.decisions },
+    properties: props,
+    children: input.context
+      ? [
+          {
+            object: "block",
+            type: "paragraph",
+            paragraph: { rich_text: [{ type: "text", text: { content: input.context } }] },
+          },
+        ]
+      : undefined,
+  } as CreateArgs);
+}
+
+/**
+ * Register an action item. The Action Register links to ClickUp, but the
+ * property holding that link isn't confirmed in the schema doc, so the URL is
+ * written into the page body where it can't fail the create call.
+ */
+export async function createAction(input: {
+  action: string;
+  owner?: string;
+  status?: string;
+  context?: string;
+}): Promise<void> {
+  const props: Record<string, unknown> = {
+    Action: { title: [{ text: { content: input.action } }] },
+  };
+  if (input.status) props.Status = { select: { name: input.status } };
+  if (input.owner) props.Owner = { rich_text: [{ text: { content: input.owner } }] };
+
+  await getClient().pages.create({
+    parent: { type: "data_source_id", data_source_id: NOTION_DS.actions },
+    properties: props,
+    children: input.context
+      ? [
+          {
+            object: "block",
+            type: "paragraph",
+            paragraph: { rich_text: [{ type: "text", text: { content: input.context } }] },
+          },
+        ]
+      : undefined,
+  } as CreateArgs);
+}
+
 /** Create a Meeting Notes row (single index across Fathom / Gemini / ClickUp / Notion). */
 export async function createMeetingNote(input: {
   title: string;

@@ -290,13 +290,20 @@ export async function clickupCreateTask(input: {
   name: string;
   tag?: string;
   dueMs?: number | null;
+  /** Task body — used to carry provenance (which meeting produced this). */
+  description?: string;
 }): Promise<{ id: string; url: string }> {
   const listId = await resolveModuleListId();
   if (!listId) throw new Error("No AMG list available to create the task in");
 
-  const body: { name: string; tags?: string[]; due_date?: number; due_date_time?: boolean } = {
-    name: input.name,
-  };
+  const body: {
+    name: string;
+    tags?: string[];
+    due_date?: number;
+    due_date_time?: boolean;
+    description?: string;
+  } = { name: input.name };
+  if (input.description) body.description = input.description;
   if (input.tag) body.tags = [input.tag];
   if (input.dueMs) {
     body.due_date = input.dueMs;

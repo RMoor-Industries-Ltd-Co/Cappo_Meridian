@@ -3,6 +3,7 @@ import { auth } from "@/auth";
 import { env, isAuthConfigured } from "@/lib/env";
 import { ingestMeetings } from "@/lib/meetings/ingest";
 import { analyzePending } from "@/lib/meetings/analyze";
+import { publishOutbound } from "@/lib/meetings/publish";
 import { isNotConnected } from "@/lib/connectors/driveFs";
 
 export const runtime = "nodejs";
@@ -30,12 +31,18 @@ export async function POST(req: NextRequest) {
   // `dryRun` reports what a sweep would find without writing to the archive —
   // the safe way to size a window before committing to it.
   const dryRun = body.dryRun === true;
+  // Outbound publishing to ClickUp/Notion is off unless asked for.
+  const publish = body.publish === true;
 
   try {
     const ingest = await ingestMeetings({ lookbackDays, dryRun });
     // A dry run must stay read-only end to end, so analysis is skipped too.
     const analysis = analyze && !dryRun ? await analyzePending(10) : null;
-    return NextResponse.json({ ingest, analysis });
+    // Publishing creates ClickUp tasks and Notion pages — outward-facing writes
+    // that can't be cleanly undone. Opt-in per call rather than a default, so a
+    // routine sync never surprises the team with new tasks.
+    const published = publish && !dryRun ? await publishOutbound() : null;
+    return NextResponse.json({ ingest, analysis, published });
   } catch (err) {
     if (isNotConnected(err)) {
       return NextResponse.json({ error: "Google not connected" }, { status: 409 });

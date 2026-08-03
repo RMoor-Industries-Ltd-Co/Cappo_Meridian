@@ -84,6 +84,34 @@ analyzed, so initiatives aren't counted twice.
 registry and small structured meeting rows (no transcript text) and can be rebuilt
 from Drive at any time.
 
+### Sources: two discovery paths
+
+| Service | Path | Why |
+|---|---|---|
+| Gemini | Gmail → Drive Doc export | Emails link to a Doc holding the transcript |
+| Fathom | Gmail → message body | Emails carry the transcript |
+| Notion | **Notion API** (`AI meeting notes` DB + page blocks) | Its emails carry a link, not the notes |
+| ClickUp | **ClickUp Docs API v3** | Same — link-only emails |
+
+Both paths normalize to one shape, so grouping, key assignment, and archiving are
+identical regardless of origin.
+
+### Publishing (outbound)
+
+Each tool ends up holding what it's for:
+
+- **ClickUp** — every *active* initiative becomes a task; its URL is stored back on
+  the initiative (`clickup_url`), which doubles as the "already tasked" marker.
+- **Notion** — meetings land in the Meeting Notes index (linking to Drive, not
+  re-uploading); *closed* initiatives land in the Decisions Log.
+
+Notion and ClickUp have no natural key to upsert on, so every publish is gated on a
+stored marker (`meetings.published_at`, `initiatives.decision_logged_at`) — otherwise
+a second run creates duplicate tasks and pages that nothing can clean up.
+
+Publishing is **opt-in per call** (`{"publish": true}` on `/api/meetings/sync`), never
+part of a routine sweep — it creates real tasks people will see.
+
 Backfill runs from a workstation, never the web server:
 
 ```bash

@@ -147,6 +147,12 @@ async function ensureSchema(p: Pool): Promise<void> {
         ALTER TABLE meetings ADD COLUMN IF NOT EXISTS analyzed_source TEXT;
         ALTER TABLE meetings ADD COLUMN IF NOT EXISTS brief           TEXT;
         ALTER TABLE meetings ADD COLUMN IF NOT EXISTS analyzed_at     TIMESTAMPTZ;
+        -- Publish markers. Notion and ClickUp have no natural key to upsert on,
+        -- so re-running the publisher would create duplicate tasks and wiki rows
+        -- that nothing can clean up. These record what has already gone out.
+        ALTER TABLE meetings    ADD COLUMN IF NOT EXISTS published_at       TIMESTAMPTZ;
+        ALTER TABLE initiatives ADD COLUMN IF NOT EXISTS decision_logged_at TIMESTAMPTZ;
+
         CREATE UNIQUE INDEX IF NOT EXISTS idx_meetings_archive_key
           ON meetings(archive_key) WHERE archive_key IS NOT NULL;
         CREATE INDEX IF NOT EXISTS idx_meetings_unanalyzed
@@ -599,6 +605,73 @@ export async function pendingArchivedMeetings(limit = 10): Promise<ArchivedMeeti
     [limit],
   );
   return rows;
+}
+
+// ── Publish markers ──────────────────────────────────────────────────
+
+export interface PublishableMeeting {
+  id: string;
+  archive_key: string;
+  title: string;
+  occurred_at: string;
+  analyzed_source: string | null;
+  brief: string | null;
+}
+
+/**
+ * Analyzed meetings not yet written to the Notion index. Requires a brief, so
+ * the wiki row carries a summary rather than an empty stub.
+ */
+export async function unpublishedMeetings(limit = 25): Promise<PublishableMeeting[]> {
+  const p = await db();
+  if (!p) return [];
+  const { rows } = await p.query<PublishableMeeting>(
+    `SELECT id::text, archive_key, title, occurred_at::text, analyzed_source, brief
+       FROM meetings
+      WHERE published_at IS NULL
+        AND analyzed_at IS NOT NULL
+        AND archive_key IS NOT NULL
+      ORDER BY occurred_at ASC
+      LIMIT $1`,
+    [limit],
+  );
+  return rows;
+}
+
+export async function markMeetingPublished(id: string): Promise<void> {
+  const p = await db();
+  if (!p) return;
+  await p.query(`UPDATE meetings SET published_at = now() WHERE id = $1`, [id]);
+}
+
+/** Record the ClickUp task opened for an initiative — also the "already tasked" marker. */
+export async function setInitiativeClickUpUrl(slug: string, url: string): Promise<void> {
+  const p = await db();
+  if (!p) return;
+  await p.query(`UPDATE initiatives SET clickup_url = $1, updated_at = now() WHERE slug = $2`, [
+    url,
+    slug,
+  ]);
+}
+
+/** Closed initiatives whose decision hasn't been logged to Notion yet. */
+export async function unloggedClosedInitiatives(limit = 25): Promise<Initiative[]> {
+  const p = await db();
+  if (!p) return [];
+  const { rows } = await p.query<Initiative>(
+    `SELECT ${INIT_RET} FROM initiatives
+      WHERE status <> 'active' AND decision_logged_at IS NULL
+      ORDER BY last_seen_at ASC
+      LIMIT $1`,
+    [limit],
+  );
+  return rows;
+}
+
+export async function markInitiativeDecisionLogged(slug: string): Promise<void> {
+  const p = await db();
+  if (!p) return;
+  await p.query(`UPDATE initiatives SET decision_logged_at = now() WHERE slug = $1`, [slug]);
 }
 
 export async function markMeetingAnalyzed(id: string, brief: string): Promise<void> {

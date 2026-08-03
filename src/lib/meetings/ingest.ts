@@ -13,14 +13,26 @@ import {
 } from "./archive";
 import { extractMeta, type MeetingMeta } from "./classify";
 import { disambiguate, formatMeetingKey, parseMeetingKey } from "./naming";
+import { fetchNotionMeetings } from "./sources/notionSource";
+import { fetchClickUpMeetings } from "./sources/clickupSource";
+import type { DirectRecord } from "./sources/types";
 
 /**
  * Meeting-transcript ingestion, Drive-primary.
  *
- * AMG records meetings across four services and none of them share a store. The
- * one signal common to all of them is a notification email, so every source is
- * discovered through Gmail and then followed to wherever the transcript
- * actually lives (a Drive Doc for Gemini, the message body for the rest).
+ * AMG records meetings across four services and none of them share a store, so
+ * discovery runs down TWO paths:
+ *
+ *   GMAIL (Gemini, Fathom) — these announce themselves by email and carry their
+ *   transcript with them, or link to a Drive Doc we can export.
+ *
+ *   DIRECT API (Notion, ClickUp) — these only ever email a link, which a
+ *   Google-scoped integration cannot follow, so their own APIs are read
+ *   instead. Routing them through Gmail is what previously reduced them to
+ *   stubs.
+ *
+ * Both paths normalize to the same Candidate shape, so everything downstream —
+ * grouping, key assignment, archiving — is identical regardless of origin.
  *
  * WHAT LANDS WHERE. Every service that covered a meeting keeps its own
  * transcript file, so the archive is complete. The spreadsheet gets ONE row per
@@ -48,12 +60,9 @@ const DEFAULT_LOOKBACK_DAYS = 30;
 const MAX_PER_SOURCE = 25;
 
 /**
- * Below this, a "transcript" is a notification stub rather than content.
- *
- * Notion and ClickUp notification emails are usually a link, not the notes, and
- * under a Google-only integration there is no way to follow that link. Those
- * sources therefore contribute little; that is a known consequence of the
- * scope, not a bug, and it shows up as `skipped` in the result.
+ * Below this, a record is a stub rather than content — an unshared Gemini Doc,
+ * a link-only notification, an empty Notion page. Counted as `skipped` rather
+ * than archived, so an empty shell never masquerades as a meeting.
  */
 const MIN_TRANSCRIPT_CHARS = 200;
 
@@ -81,18 +90,27 @@ export const SOURCES: SourceSpec[] = [
     },
   },
   { source: "fathom", rank: 2, query: "from:fathom.video", extract: async (m) => m.text },
-  {
-    source: "notion",
-    rank: 3,
-    query: "from:notion.so subject:(meeting OR notes OR transcript)",
-    extract: async (m) => m.text,
-  },
-  {
-    source: "clickup",
-    rank: 4,
-    query: "from:clickup.com subject:(recording OR transcript OR notes)",
-    extract: async (m) => m.text,
-  },
+];
+
+/**
+ * Sources read through their own APIs instead of Gmail.
+ *
+ * Notion and ClickUp notify by email with a LINK and nothing more, which a
+ * Google-scoped integration cannot follow — routing them through Gmail produced
+ * stubs. Reading their APIs directly gets the actual content, so they become
+ * first-class sources rather than the thin ones.
+ *
+ * Ranked below Gemini and Fathom: when a meeting was captured by a dedicated
+ * transcription service AND written up in Notion, the verbatim transcript is
+ * the better basis for analysis than the write-up.
+ */
+export const DIRECT_SOURCES: {
+  source: MeetingSource;
+  rank: number;
+  fetch(limit: number): Promise<DirectRecord[]>;
+}[] = [
+  { source: "notion", rank: 3, fetch: fetchNotionMeetings },
+  { source: "clickup", rank: 4, fetch: fetchClickUpMeetings },
 ];
 
 /**
@@ -127,12 +145,22 @@ export function dedupKey(title: string, occurredAt: string): string {
   return `${slugify(normalizeTitle(title)) || "untitled"}|${occurredAt.slice(0, 10)}`;
 }
 
+/**
+ * One candidate meeting record, normalized across both discovery paths so
+ * grouping, key assignment, and archiving don't care how it was found.
+ */
 interface Candidate {
-  spec: SourceSpec;
-  msg: GmailMessageBody;
+  source: MeetingSource;
+  rank: number;
+  /** Gmail message id, or the origin system's record id. */
+  ref: string;
+  subject: string;
   body: string;
   meta: MeetingMeta;
-  /** True when the start time came from the notification, not the transcript. */
+  /**
+   * True when no reliable meeting time was available and the discovery
+   * timestamp had to stand in. Drives `duration_known = FALSE`.
+   */
   startInferred: boolean;
   start: Date;
   end: Date | null;
@@ -212,13 +240,16 @@ export async function ingestMeetings(options: IngestOptions = {}): Promise<Inges
           continue;
         }
         const meta = await extractMeta(msg.subject, body, categories);
-        const startInferred = !meta.startISO;
         candidates.push({
-          spec,
-          msg,
+          source: spec.source,
+          rank: spec.rank,
+          ref: msg.id,
+          subject: msg.subject,
           body,
           meta,
-          startInferred,
+          // The email's timestamp is when the NOTIFICATION arrived, so falling
+          // back to it means the meeting time is unknown, not merely imprecise.
+          startInferred: !meta.startISO,
           start: new Date(meta.startISO ?? msg.date),
           end: meta.endISO ? new Date(meta.endISO) : null,
         });
@@ -228,12 +259,53 @@ export async function ingestMeetings(options: IngestOptions = {}): Promise<Inges
     }
   }
 
+  // Direct-API sources (Notion, ClickUp). These carry their own record date,
+  // which — unlike a notification timestamp — is a real meeting date, so it is
+  // trusted when the transcript itself states nothing.
+  for (const direct of DIRECT_SOURCES) {
+    let records: DirectRecord[] = [];
+    try {
+      records = await direct.fetch(maxPerSource);
+    } catch (e) {
+      result.errors.push(`${direct.source}: ${e instanceof Error ? e.message : String(e)}`);
+      continue;
+    }
+
+    for (const rec of records) {
+      result.scanned++;
+      try {
+        const body = rec.body.trim();
+        if (body.length < MIN_TRANSCRIPT_CHARS) {
+          result.skipped++;
+          continue;
+        }
+        const meta = await extractMeta(rec.title, body, categories);
+        const stated = meta.startISO ?? rec.occurredAt;
+        candidates.push({
+          source: direct.source,
+          rank: direct.rank,
+          ref: rec.externalId,
+          subject: rec.title,
+          body,
+          meta,
+          startInferred: !stated,
+          start: new Date(stated ?? Date.now()),
+          end: meta.endISO ? new Date(meta.endISO) : null,
+        });
+      } catch (e) {
+        result.errors.push(
+          `${direct.source}/${rec.externalId}: ${e instanceof Error ? e.message : String(e)}`,
+        );
+      }
+    }
+  }
+
   // ── 2. Group candidates into meetings ─────────────────────────────
   const groups = new Map<string, Candidate[]>();
   for (const c of candidates) {
     // Identity uses the meeting's own date when we have it, so a notification
     // that arrived the following morning still groups with its meeting.
-    const dk = dedupKey(c.msg.subject, c.start.toISOString());
+    const dk = dedupKey(c.subject, c.start.toISOString());
     const bucket = groups.get(dk);
     if (bucket) bucket.push(c);
     else groups.set(dk, [c]);
@@ -243,7 +315,7 @@ export async function ingestMeetings(options: IngestOptions = {}): Promise<Inges
     result.meetings = groups.size;
     result.inferredTimes = [...groups.values()].filter((g) => g.every((c) => c.startInferred)).length;
     for (const g of groups.values()) {
-      for (const c of g) result.bySource[c.spec.source] = (result.bySource[c.spec.source] ?? 0) + 1;
+      for (const c of g) result.bySource[c.source] = (result.bySource[c.source] ?? 0) + 1;
     }
     return result;
   }
@@ -256,7 +328,7 @@ export async function ingestMeetings(options: IngestOptions = {}): Promise<Inges
     try {
       // The best-ranked source speaks for the meeting: a full Gemini transcript
       // dates and titles it more reliably than a Fathom summary.
-      group.sort((a, b) => a.spec.rank - b.spec.rank);
+      group.sort((a, b) => a.rank - b.rank);
       const best = group[0];
 
       // Reuse the key this meeting already has, so re-ingestion is idempotent.
@@ -272,13 +344,13 @@ export async function ingestMeetings(options: IngestOptions = {}): Promise<Inges
 
       const written: string[] = [];
       for (const c of group) {
-        const folder = SERVICE_BY_SOURCE[c.spec.source];
+        const folder = SERVICE_BY_SOURCE[c.source];
         if (!folder) continue;
         const { written: isNew } = await writeTranscript(folder, key, c.body);
-        written.push(c.spec.source);
+        written.push(c.source);
         if (isNew) {
           result.archived++;
-          result.bySource[c.spec.source] = (result.bySource[c.spec.source] ?? 0) + 1;
+          result.bySource[c.source] = (result.bySource[c.source] ?? 0) + 1;
         }
       }
 
@@ -295,10 +367,10 @@ export async function ingestMeetings(options: IngestOptions = {}): Promise<Inges
         // the row must not imply a precision the archive doesn't have.
         durationKnown: Boolean(parsed?.durationKnown) && !best.startInferred,
         category: best.meta.category,
-        title: best.meta.title || normalizeTitle(best.msg.subject),
+        title: best.meta.title || normalizeTitle(best.subject),
         attendees: best.meta.attendees,
         sources: written,
-        analyzedSource: best.spec.source,
+        analyzedSource: best.source,
         brief: "",
       });
     } catch (e) {
