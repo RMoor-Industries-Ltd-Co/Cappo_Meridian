@@ -55,6 +55,12 @@ const schema = z.object({
   // Postgres — persistence (AI research projects + conversations, etc.)
   DATABASE_URL: z.string().optional(),
 
+  // Meeting-intelligence digest — comma-separated recipients for the daily
+  // board digest, and the kill switch the scheduled sender honours. The UI's
+  // manual "Send" ignores DIGEST_ENABLED (a partner pressing it has decided).
+  DIGEST_RECIPIENTS: z.string().optional(),
+  DIGEST_ENABLED: z.string().optional(),
+
   // Machine-to-machine agent key — lets ALLIE (allen.i.verse) delegate AMG tasks to
   // Cappo's /api/agent server-to-server, separate from the human Google login.
   AGENT_API_KEY: z.string().optional(),

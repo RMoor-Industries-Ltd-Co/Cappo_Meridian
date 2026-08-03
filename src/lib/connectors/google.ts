@@ -43,11 +43,15 @@ export function createOAuthClient(): OAuth2Client {
 
 export function buildAuthUrl(): string {
   const client = createOAuthClient();
+  // NOTE: no `hd` parameter. generateAuthUrl() rejects unknown keys into the
+  // authorize URL in a way Google answers with `Error 400: invalid_request`,
+  // which broke the connector flow exactly as it broke app sign-in. The
+  // workspace restriction belongs on the OAuth client / account chooser, not
+  // here.
   return client.generateAuthUrl({
     access_type: "offline", // request a refresh token
     prompt: "consent",
     scope: GOOGLE_SCOPES,
-    hd: env.GOOGLE_WORKSPACE_DOMAIN, // hint the apex-meridian-group.com workspace
   });
 }
 

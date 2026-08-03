@@ -267,6 +267,17 @@ export async function driveUpload(
 }
 
 /** Create a blank Google Doc in the folder. */
+/**
+ * Export a Google-native file (Doc/Slides) as plain text. This is how Gemini
+ * meeting notes are read: the notification email only links to a Doc, so the
+ * transcript itself lives in Drive, not in the message body.
+ */
+export async function driveExportText(fileId: string): Promise<string> {
+  const d = await client();
+  const res = await d.files.export({ fileId, mimeType: "text/plain" }, { responseType: "text" });
+  return typeof res.data === "string" ? res.data : String(res.data ?? "");
+}
+
 export async function driveCreateDoc(name: string, parentId = "root"): Promise<DriveItem> {
   const drive = await client();
   const { data } = await drive.files.create({

@@ -32,6 +32,10 @@ The icon rail exposes ten business-operation functions:
   "quarter ends in N days" hint as the next quarter approaches.
 - **Research** — an AI research workspace (Claude-powered, on the roadmap) with a
   collapsible side rail that tracks project folders, files, and Claude responses.
+- **Meetings** — meeting intelligence. Ingests transcripts from Gemini, Fathom,
+  Notion, and ClickUp (all discovered through their notification emails),
+  distills them into a living registry of current and future initiatives, and
+  composes the daily board digest. See below.
 - **Messages** — unified inbox from the Gmail connector.
 - **Settings** — integration status + Google OAuth connect.
 - The remaining modules are styled scaffolds wired to fill in from the connectors.
@@ -89,6 +93,59 @@ See [`.env.example`](.env.example) for the full list. All credentials are option
 | `GET /api/feed`           | Merged recent activity across connectors     |
 | `GET /api/auth/google`    | Start Google OAuth consent                    |
 | `GET /api/auth/google/callback` | OAuth redirect target                   |
+| `POST /api/meetings/sync` | Ingest new transcripts, then analyze them    |
+| `POST /api/meetings/digest` | Compose the board digest (`{preview:true}` to not send) |
+
+Both meeting routes accept either a signed-in session or the `x-agent-key`
+header (`AGENT_API_KEY`), which is how a scheduled caller drives them.
+
+## Meeting intelligence
+
+AMG records meetings across four transcription services and none of them share a
+store. The one signal common to all is a notification email, so every source is
+discovered through Gmail and then followed to wherever the transcript actually
+lives — a Drive Doc for Gemini, the message body for the rest.
+
+```
+Gmail notifications ─→ ingest ─→ meetings + meeting_transcripts
+                                          │
+                                    analyze (Claude)
+                                          │
+                          initiatives + initiative_mentions
+                                          │
+                              digest ─→ Gmail ─→ board@
+```
+
+Three properties are worth knowing:
+
+**The registry evolves, it doesn't accumulate.** Each transcript is analyzed
+against the *existing* registry (compacted to slug + title + one-line summary),
+and the model emits reconciliation operations — create / update / close — rather
+than a fresh list of what it saw. One programme discussed in six meetings ends up
+as one initiative with six mentions.
+
+**Every claim is traceable.** Each operation carries a verbatim excerpt, stored
+as an `initiative_mentions` row against the meeting that produced it. The
+`/meetings` page shows this audit trail inline.
+
+**Context is hierarchical, not cumulative.** The digest reads open initiatives +
+the last 7 days of meeting briefs + the current quarter's rollup. Re-summarizing
+every transcript daily would not survive the first quarter.
+
+Ingestion is idempotent (`UNIQUE (source, source_ref)`), and the digest is
+idempotent per calendar day (`UNIQUE (sent_for)`) — so a retry, or a double cron
+firing, cannot mail the board twice.
+
+### Scheduling
+
+Not wired up by default: `DIGEST_ENABLED` gates the scheduled sender, and the
+intended rollout is to send by hand from the `/meetings` page for several days
+first. Once the output is trusted, add to the host's crontab:
+
+```cron
+20 6 * * *  curl -fsS -X POST -H "x-agent-key: $AGENT_API_KEY" https://cappo.apex-meridian-group.com/api/meetings/sync
+40 6 * * *  curl -fsS -X POST -H "x-agent-key: $AGENT_API_KEY" https://cappo.apex-meridian-group.com/api/meetings/digest
+```
 
 ## Project structure
 

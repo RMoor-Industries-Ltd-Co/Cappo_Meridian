@@ -20,12 +20,15 @@ services:
       - AUTH_SECRET
       - ANTHROPIC_API_KEY
       - CLAUDE_API_KEY
+      - CLAUDE_MODEL
       - OPENAI_API_KEY
       - OPENAI_MODEL
       - PERPLEXITY_API_KEY
       - PERPLEXITY_MODEL
       - DATABASE_URL
       - AGENT_API_KEY
+      - DIGEST_RECIPIENTS
+      - DIGEST_ENABLED
     volumes:
       - cappo_data:/data
     expose:

@@ -12,6 +12,7 @@ import {
   Mail,
   HardDrive,
   BookOpen,
+  Mic,
   type LucideIcon,
 } from "lucide-react";
 
@@ -34,6 +35,7 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/contact-center", label: "Contact Center", icon: PhoneCall, blurb: "Outbound call console for suppliers, wholesalers & contractors — scripts, capture, outcomes." },
   { href: "/budget", label: "Budget", icon: Wallet, blurb: "Spend, forecasts, and financial health." },
   { href: "/operations", label: "Operations", icon: BookText, blurb: "Live AMG structure, current work swim lanes, and meeting notes." },
+  { href: "/meetings", label: "Meetings", icon: Mic, blurb: "Meeting intelligence — transcripts from every service, distilled into a living initiative registry and the daily board digest." },
   { href: "/drive", label: "Drive", icon: HardDrive, blurb: "Browse and manage the AMG Google Drive — files & folders." },
   { href: "/legal", label: "Legal", icon: Scale, blurb: "Contracts, compliance, and entity documents." },
   { href: "/messages", label: "Messages", icon: Mail, blurb: "Unified email and team messages." },

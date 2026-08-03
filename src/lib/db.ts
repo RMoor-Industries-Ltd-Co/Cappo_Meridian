@@ -64,6 +64,74 @@ async function ensureSchema(p: Pool): Promise<void> {
           created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
         );
         CREATE INDEX IF NOT EXISTS idx_call_logs_supplier ON call_logs(supplier_id, id DESC);
+
+        -- ── Meeting intelligence ──────────────────────────────────────
+        CREATE TABLE IF NOT EXISTS meetings (
+          id            BIGSERIAL PRIMARY KEY,
+          title         TEXT NOT NULL,
+          occurred_at   TIMESTAMPTZ NOT NULL,
+          dedup_key     TEXT NOT NULL UNIQUE,
+          participants  TEXT[],
+          created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+        );
+        CREATE TABLE IF NOT EXISTS meeting_transcripts (
+          id            BIGSERIAL PRIMARY KEY,
+          meeting_id    BIGINT NOT NULL REFERENCES meetings(id) ON DELETE CASCADE,
+          source        TEXT NOT NULL,
+          source_ref    TEXT NOT NULL,
+          rank          INT NOT NULL DEFAULT 9,
+          body          TEXT NOT NULL,
+          brief         TEXT,
+          analyzed_at   TIMESTAMPTZ,
+          created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+          UNIQUE (source, source_ref)
+        );
+        CREATE TABLE IF NOT EXISTS initiatives (
+          id            BIGSERIAL PRIMARY KEY,
+          title         TEXT NOT NULL,
+          slug          TEXT NOT NULL UNIQUE,
+          summary       TEXT NOT NULL,
+          horizon       TEXT NOT NULL DEFAULT 'current',
+          status        TEXT NOT NULL DEFAULT 'active',
+          owner         TEXT,
+          first_seen_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+          last_seen_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+          clickup_url   TEXT,
+          created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+          updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+        );
+        CREATE TABLE IF NOT EXISTS initiative_mentions (
+          id            BIGSERIAL PRIMARY KEY,
+          initiative_id BIGINT NOT NULL REFERENCES initiatives(id) ON DELETE CASCADE,
+          meeting_id    BIGINT NOT NULL REFERENCES meetings(id) ON DELETE CASCADE,
+          excerpt       TEXT NOT NULL,
+          change_note   TEXT,
+          created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+          UNIQUE (initiative_id, meeting_id)
+        );
+        CREATE TABLE IF NOT EXISTS period_rollups (
+          id            BIGSERIAL PRIMARY KEY,
+          period_kind   TEXT NOT NULL,
+          period_start  DATE NOT NULL,
+          narrative     TEXT NOT NULL,
+          created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+          UNIQUE (period_kind, period_start)
+        );
+        CREATE TABLE IF NOT EXISTS digests (
+          id            BIGSERIAL PRIMARY KEY,
+          sent_for      DATE NOT NULL UNIQUE,
+          subject       TEXT NOT NULL,
+          body_html     TEXT NOT NULL,
+          body_text     TEXT NOT NULL,
+          recipients    TEXT NOT NULL,
+          gmail_msg_id  TEXT,
+          sent_at       TIMESTAMPTZ,
+          created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+        );
+        CREATE INDEX IF NOT EXISTS idx_transcripts_meeting ON meeting_transcripts(meeting_id, rank);
+        CREATE INDEX IF NOT EXISTS idx_transcripts_pending ON meeting_transcripts(analyzed_at) WHERE analyzed_at IS NULL;
+        CREATE INDEX IF NOT EXISTS idx_mentions_initiative ON initiative_mentions(initiative_id, id DESC);
+        CREATE INDEX IF NOT EXISTS idx_initiatives_open ON initiatives(status, horizon, last_seen_at DESC);
       `)
       .then(() => undefined)
       .catch((e) => {
@@ -299,4 +367,322 @@ export async function setCallClickup(callId: string, url: string): Promise<void>
   const p = await db();
   if (!p) return;
   await p.query(`UPDATE call_logs SET clickup_url = $1 WHERE id = $2`, [url, callId]);
+}
+
+// ── Meeting intelligence ─────────────────────────────────────────────
+export type MeetingSource = "gemini" | "fathom" | "notion" | "clickup";
+export type Horizon = "current" | "future";
+export type InitiativeStatus = "active" | "completed" | "dropped";
+
+export interface Meeting {
+  id: string;
+  title: string;
+  occurred_at: string;
+  dedup_key: string;
+  participants: string[] | null;
+  created_at: string;
+}
+export interface MeetingTranscript {
+  id: string;
+  meeting_id: string;
+  source: MeetingSource;
+  source_ref: string;
+  rank: number;
+  body: string;
+  brief: string | null;
+  analyzed_at: string | null;
+  created_at: string;
+}
+export interface Initiative {
+  id: string;
+  title: string;
+  slug: string;
+  summary: string;
+  horizon: Horizon;
+  status: InitiativeStatus;
+  owner: string | null;
+  first_seen_at: string;
+  last_seen_at: string;
+  clickup_url: string | null;
+}
+export interface InitiativeMention {
+  id: string;
+  initiative_id: string;
+  meeting_id: string;
+  excerpt: string;
+  change_note: string | null;
+  created_at: string;
+  meeting_title?: string;
+  occurred_at?: string;
+}
+export interface Digest {
+  id: string;
+  sent_for: string;
+  subject: string;
+  body_html: string;
+  body_text: string;
+  recipients: string;
+  gmail_msg_id: string | null;
+  sent_at: string | null;
+  created_at: string;
+}
+
+// node-postgres hydrates timestamptz into a JS Date. Everything downstream —
+// prompt context, digest rendering, sorting — treats these as ISO strings, so
+// cast in SQL rather than declaring `string` and shipping a Date.
+const INIT_RET =
+  "id::text, title, slug, summary, horizon, status, owner, " +
+  "first_seen_at::text, last_seen_at::text, clickup_url";
+
+/** Upsert the meeting for a dedup key. Returns its id. Idempotent across sources. */
+export async function upsertMeeting(m: {
+  title: string;
+  occurredAt: string;
+  dedupKey: string;
+  participants?: string[];
+}): Promise<string | null> {
+  const p = await db();
+  if (!p) return null;
+  const { rows } = await p.query<{ id: string }>(
+    `INSERT INTO meetings (title, occurred_at, dedup_key, participants)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (dedup_key) DO UPDATE SET title = EXCLUDED.title
+       RETURNING id::text`,
+    [m.title, m.occurredAt, m.dedupKey, m.participants ?? null],
+  );
+  return rows[0]?.id ?? null;
+}
+
+/**
+ * Store one source's transcript for a meeting. Returns true when a new row was
+ * written, false when this (source, source_ref) was already ingested — which is
+ * what makes re-running the sync job safe.
+ */
+export async function insertTranscript(t: {
+  meetingId: string;
+  source: MeetingSource;
+  sourceRef: string;
+  rank: number;
+  body: string;
+}): Promise<boolean> {
+  const p = await db();
+  if (!p) return false;
+  const { rowCount } = await p.query(
+    `INSERT INTO meeting_transcripts (meeting_id, source, source_ref, rank, body)
+       VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (source, source_ref) DO NOTHING`,
+    [t.meetingId, t.source, t.sourceRef, t.rank, t.body],
+  );
+  return (rowCount ?? 0) > 0;
+}
+
+/**
+ * Transcripts awaiting analysis — at most one per meeting, always the
+ * best-ranked source. Analyzing a second source for the same meeting would
+ * double-count every initiative discussed in it.
+ */
+export async function pendingTranscripts(limit = 10): Promise<(MeetingTranscript & { title: string; occurred_at: string })[]> {
+  const p = await db();
+  if (!p) return [];
+  // DISTINCT ON must order by meeting_id first, so chronological ordering —
+  // which matters, the registry has to evolve in the order meetings happened —
+  // is applied by the outer query over the real timestamp, not its text cast.
+  const { rows } = await p.query(
+    `SELECT s.id, s.meeting_id, s.source, s.source_ref, s.rank, s.body,
+            s.brief, s.analyzed_at, s.created_at, s.title, s.ts::text AS occurred_at
+       FROM (
+         SELECT DISTINCT ON (t.meeting_id)
+                t.id::text, t.meeting_id::text, t.source, t.source_ref, t.rank,
+                t.body, t.brief, t.analyzed_at::text, t.created_at::text,
+                m.title, m.occurred_at AS ts
+           FROM meeting_transcripts t
+           JOIN meetings m ON m.id = t.meeting_id
+          WHERE t.analyzed_at IS NULL
+          ORDER BY t.meeting_id, t.rank ASC
+       ) s
+      ORDER BY s.ts ASC
+      LIMIT $1`,
+    [limit],
+  );
+  return rows;
+}
+
+export async function markTranscriptAnalyzed(id: string, brief: string): Promise<void> {
+  const p = await db();
+  if (!p) return;
+  await p.query(`UPDATE meeting_transcripts SET brief = $1, analyzed_at = now() WHERE id = $2`, [brief, id]);
+}
+
+export async function listInitiatives(includeClosed = false): Promise<Initiative[]> {
+  const p = await db();
+  if (!p) return [];
+  const { rows } = await p.query<Initiative>(
+    `SELECT ${INIT_RET} FROM initiatives
+      ${includeClosed ? "" : "WHERE status = 'active'"}
+      ORDER BY status, horizon DESC, last_seen_at DESC LIMIT 300`,
+  );
+  return rows;
+}
+
+export async function createInitiative(i: {
+  title: string;
+  slug: string;
+  summary: string;
+  horizon: Horizon;
+  owner?: string | null;
+  seenAt: string;
+}): Promise<Initiative | null> {
+  const p = await db();
+  if (!p) return null;
+  const { rows } = await p.query<Initiative>(
+    `INSERT INTO initiatives (title, slug, summary, horizon, owner, first_seen_at, last_seen_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $6)
+       ON CONFLICT (slug) DO UPDATE
+         SET summary = EXCLUDED.summary, last_seen_at = GREATEST(initiatives.last_seen_at, EXCLUDED.last_seen_at)
+       RETURNING ${INIT_RET}`,
+    [i.title, i.slug, i.summary, i.horizon, i.owner ?? null, i.seenAt],
+  );
+  return rows[0] ?? null;
+}
+
+export async function updateInitiative(
+  slug: string,
+  patch: { summary?: string; horizon?: Horizon; owner?: string | null; status?: InitiativeStatus; seenAt: string },
+): Promise<Initiative | null> {
+  const p = await db();
+  if (!p) return null;
+  const { rows } = await p.query<Initiative>(
+    `UPDATE initiatives SET
+        summary      = COALESCE($2, summary),
+        horizon      = COALESCE($3, horizon),
+        owner        = COALESCE($4, owner),
+        status       = COALESCE($5, status),
+        last_seen_at = GREATEST(last_seen_at, $6),
+        updated_at   = now()
+      WHERE slug = $1
+      RETURNING ${INIT_RET}`,
+    [slug, patch.summary ?? null, patch.horizon ?? null, patch.owner ?? null, patch.status ?? null, patch.seenAt],
+  );
+  return rows[0] ?? null;
+}
+
+export async function addMention(m: {
+  initiativeId: string;
+  meetingId: string;
+  excerpt: string;
+  changeNote?: string | null;
+}): Promise<void> {
+  const p = await db();
+  if (!p) return;
+  await p.query(
+    `INSERT INTO initiative_mentions (initiative_id, meeting_id, excerpt, change_note)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (initiative_id, meeting_id) DO UPDATE
+         SET excerpt = EXCLUDED.excerpt, change_note = EXCLUDED.change_note`,
+    [m.initiativeId, m.meetingId, m.excerpt, m.changeNote ?? null],
+  );
+}
+
+export async function listMentions(initiativeId: string, limit = 20): Promise<InitiativeMention[]> {
+  const p = await db();
+  if (!p) return [];
+  const { rows } = await p.query<InitiativeMention>(
+    `SELECT n.id::text, n.initiative_id::text, n.meeting_id::text, n.excerpt, n.change_note,
+            n.created_at::text, m.title AS meeting_title, m.occurred_at::text
+       FROM initiative_mentions n
+       JOIN meetings m ON m.id = n.meeting_id
+      WHERE n.initiative_id = $1
+      ORDER BY m.occurred_at DESC LIMIT $2`,
+    [initiativeId, limit],
+  );
+  return rows;
+}
+
+/** Meeting briefs from the last N days — the digest's short-term memory. */
+export async function recentBriefs(days = 7): Promise<{ title: string; occurred_at: string; brief: string }[]> {
+  const p = await db();
+  if (!p) return [];
+  const { rows } = await p.query<{ title: string; occurred_at: string; brief: string }>(
+    `SELECT m.title, m.occurred_at::text, t.brief
+       FROM meeting_transcripts t
+       JOIN meetings m ON m.id = t.meeting_id
+      WHERE t.brief IS NOT NULL AND m.occurred_at > now() - ($1 || ' days')::interval
+      ORDER BY m.occurred_at DESC LIMIT 40`,
+    [String(days)],
+  );
+  return rows;
+}
+
+export async function getRollup(kind: "week" | "quarter", periodStart: string): Promise<string | null> {
+  const p = await db();
+  if (!p) return null;
+  const { rows } = await p.query<{ narrative: string }>(
+    `SELECT narrative FROM period_rollups WHERE period_kind = $1 AND period_start = $2`,
+    [kind, periodStart],
+  );
+  return rows[0]?.narrative ?? null;
+}
+
+export async function saveRollup(kind: "week" | "quarter", periodStart: string, narrative: string): Promise<void> {
+  const p = await db();
+  if (!p) return;
+  await p.query(
+    `INSERT INTO period_rollups (period_kind, period_start, narrative) VALUES ($1, $2, $3)
+       ON CONFLICT (period_kind, period_start) DO UPDATE SET narrative = EXCLUDED.narrative`,
+    [kind, periodStart, narrative],
+  );
+}
+
+export async function getDigest(sentFor: string): Promise<Digest | null> {
+  const p = await db();
+  if (!p) return null;
+  const { rows } = await p.query<Digest>(
+    `SELECT id::text, sent_for::text, subject, body_html, body_text, recipients,
+            gmail_msg_id, sent_at::text, created_at::text
+       FROM digests WHERE sent_for = $1`,
+    [sentFor],
+  );
+  return rows[0] ?? null;
+}
+
+export async function listDigests(limit = 30): Promise<Omit<Digest, "body_html" | "body_text">[]> {
+  const p = await db();
+  if (!p) return [];
+  const { rows } = await p.query<Omit<Digest, "body_html" | "body_text">>(
+    `SELECT id::text, sent_for::text, subject, recipients, gmail_msg_id,
+            sent_at::text, created_at::text
+       FROM digests ORDER BY sent_for DESC LIMIT $1`,
+    [limit],
+  );
+  return rows;
+}
+
+/**
+ * Claim the digest slot for a date. Returns null when one already exists —
+ * the unique constraint on sent_for is what stops a double cron firing from
+ * mailing the board twice.
+ */
+export async function claimDigest(d: {
+  sentFor: string;
+  subject: string;
+  html: string;
+  text: string;
+  recipients: string;
+}): Promise<string | null> {
+  const p = await db();
+  if (!p) return null;
+  const { rows } = await p.query<{ id: string }>(
+    `INSERT INTO digests (sent_for, subject, body_html, body_text, recipients)
+       VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (sent_for) DO NOTHING
+       RETURNING id::text`,
+    [d.sentFor, d.subject, d.html, d.text, d.recipients],
+  );
+  return rows[0]?.id ?? null;
+}
+
+export async function markDigestSent(id: string, gmailMsgId: string): Promise<void> {
+  const p = await db();
+  if (!p) return;
+  await p.query(`UPDATE digests SET gmail_msg_id = $1, sent_at = now() WHERE id = $2`, [gmailMsgId, id]);
 }
