@@ -299,20 +299,59 @@ export async function gmailFetchBodies(query: string, max = 25): Promise<GmailMe
   return out;
 }
 
-/** Crude tag-strip — good enough to turn a notification email into readable text. */
+const ENTITIES: Record<string, string> = {
+  amp: "&",
+  lt: "<",
+  gt: ">",
+  quot: '"',
+  apos: "'",
+  nbsp: " ",
+};
+
+/**
+ * Decode HTML entities in a SINGLE pass.
+ *
+ * Chained .replace() calls would double-unescape: "&amp;lt;" becomes "&lt;"
+ * under the &amp; rule, which the later &lt; rule then turns into "<". One pass
+ * over the original string means no rule can ever consume another's output.
+ */
+function decodeEntities(s: string): string {
+  return s.replace(/&(#\d{1,7}|#[xX][0-9a-fA-F]{1,6}|[a-zA-Z]+);/g, (match, ent: string) => {
+    if (ent.startsWith("#")) {
+      const code = ent[1] === "x" || ent[1] === "X" ? parseInt(ent.slice(2), 16) : Number(ent.slice(1));
+      return Number.isFinite(code) && code > 0 && code <= 0x10ffff ? String.fromCodePoint(code) : match;
+    }
+    return ENTITIES[ent.toLowerCase()] ?? match;
+  });
+}
+
+/**
+ * Turn a notification email's HTML into readable plain text for the model.
+ *
+ * Tags are removed to a fixed point rather than in one pass: a single pass over
+ * "<<script>script>" leaves a working "<script>" behind, because removing the
+ * inner match rejoins the outer characters. Looping until the string stops
+ * changing terminates because every iteration strictly shortens it.
+ *
+ * Entities are decoded only after tag removal is complete, so a decoded "<" is
+ * always literal text and can never be re-read as markup.
+ */
 function stripHtml(html: string): string {
-  return html
-    .replace(/<(script|style)[\s\S]*?<\/\1>/gi, "")
-    .replace(/<br\s*\/?>/gi, "\n")
-    .replace(/<\/(p|div|tr|li|h[1-6])>/gi, "\n")
-    .replace(/<[^>]+>/g, "")
-    .replace(/&nbsp;/g, " ")
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&#39;|&apos;/g, "'")
-    .replace(/&quot;/g, '"')
-    .replace(/\n{3,}/g, "\n\n");
+  let s = html;
+  let prev: string;
+  do {
+    prev = s;
+    s = s.replace(/<(script|style)\b[\s\S]*?<\/\1\s*>/gi, "");
+  } while (s !== prev);
+
+  s = s.replace(/<br\s*\/?>/gi, "\n").replace(/<\/(p|div|tr|li|h[1-6])\s*>/gi, "\n");
+
+  do {
+    prev = s;
+    s = s.replace(/<[^<>]*>/g, "");
+  } while (s !== prev);
+
+  return decodeEntities(s).replace(/\n{3,}/g, "\n\n");
 }
 
 /** Pull the signed-copy PDF attachments (e.g. PandaDoc) from the mailbox, deduped by filename. */
