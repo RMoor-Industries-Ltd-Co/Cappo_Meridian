@@ -61,6 +61,14 @@ const schema = z.object({
   DIGEST_RECIPIENTS: z.string().optional(),
   DIGEST_ENABLED: z.string().optional(),
 
+  // Meeting archive — the Drive folder that holds the whole meeting record
+  // (per-service transcript folders + the "Meeting Database" spreadsheet). This
+  // folder is the system of record; Postgres is a rebuildable cache of it.
+  MEETING_ARCHIVE_FOLDER_ID: z.string().optional(),
+  // Which connected Google account owns that folder. Falls back to the default
+  // connection when unset or not separately authorized.
+  MEETING_ARCHIVE_ACCOUNT: z.string().optional(),
+
   // Machine-to-machine agent key — lets ALLIE (allen.i.verse) delegate AMG tasks to
   // Cappo's /api/agent server-to-server, separate from the human Google login.
   AGENT_API_KEY: z.string().optional(),

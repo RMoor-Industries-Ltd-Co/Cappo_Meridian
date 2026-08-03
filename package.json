@@ -7,7 +7,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "backfill:meetings": "tsx --tsconfig tsconfig.json scripts/backfill-meetings.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.102.0",
@@ -33,12 +34,16 @@
     "eslint": "^9",
     "eslint-config-next": "16.2.7",
     "tailwindcss": "^4",
+    "tsx": "^4.23.5",
     "typescript": "^5"
   },
   "pnpm": {
     "overrides": {
       "google-auth-library": "10.7.0",
       "postcss": "^8.5.10"
-    }
+    },
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
   }
 }

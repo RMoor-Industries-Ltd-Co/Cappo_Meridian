@@ -4,13 +4,22 @@ import {
   addMention,
   createInitiative,
   listInitiatives,
-  markTranscriptAnalyzed,
-  pendingTranscripts,
+  markMeetingAnalyzed,
+  pendingArchivedMeetings,
   updateInitiative,
+  type ArchivedMeeting,
   type Horizon,
   type Initiative,
   type InitiativeStatus,
 } from "@/lib/db";
+import {
+  readTranscript,
+  upsertDatahouseRows,
+  writeBrief,
+  SERVICE_BY_SOURCE,
+  SERVICE_FOLDERS,
+  type DatahouseRow,
+} from "./archive";
 
 /**
  * Transcript → initiative registry.
@@ -122,7 +131,14 @@ export interface AnalyzeResult {
   errors: string[];
 }
 
-/** Analyze up to `limit` unprocessed transcripts, oldest meeting first. */
+/**
+ * Analyze up to `limit` unprocessed meetings, oldest first.
+ *
+ * Transcripts are read from the Drive archive rather than the database — the
+ * archive is the system of record, and keeping megabytes of transcript text out
+ * of Postgres is the whole point of that split. Postgres supplies only the
+ * queue (which meetings are unanalyzed) and the initiative registry.
+ */
 export async function analyzePending(limit = 10): Promise<AnalyzeResult> {
   const out: AnalyzeResult = { analyzed: 0, created: 0, updated: 0, closed: 0, errors: [] };
   const ai = getAnthropic();
@@ -131,15 +147,42 @@ export async function analyzePending(limit = 10): Promise<AnalyzeResult> {
     return out;
   }
 
-  const batch = await pendingTranscripts(limit);
+  const batch = await pendingArchivedMeetings(limit);
   for (const t of batch) {
     try {
+      // Read the best-ranked source's transcript for this meeting. Falling back
+      // through the other services keeps a meeting analyzable when its primary
+      // file is missing, instead of stalling the queue on it forever.
+      const preferred = SERVICE_BY_SOURCE[t.analyzed_source ?? ""] ?? undefined;
+      const order = preferred
+        ? [preferred, ...SERVICE_FOLDERS.filter((s) => s !== preferred)]
+        : [...SERVICE_FOLDERS];
+
+      let body: string | null = null;
+      let usedSource: string = t.analyzed_source ?? "";
+      for (const service of order) {
+        body = await readTranscript(service, t.archive_key);
+        if (body) {
+          usedSource = service.toLowerCase();
+          break;
+        }
+      }
+      if (!body) {
+        // Mark it done with an explicit note rather than retrying forever. The
+        // transcript is genuinely absent from the archive; silence here would
+        // look like a meeting that produced nothing.
+        await markMeetingAnalyzed(t.id, "No transcript found in the archive for this meeting.");
+        out.errors.push(`${t.archive_key}: no transcript file in the archive`);
+        continue;
+      }
+
       // Re-read the registry each iteration: an initiative created by the
       // previous transcript must be visible to this one, or the second meeting
       // discussing it would create a duplicate.
       const registry = await listInitiatives();
-      const transcript = t.body.slice(0, MAX_TRANSCRIPT_CHARS);
-      const truncated = t.body.length > MAX_TRANSCRIPT_CHARS;
+      const transcript = body.slice(0, MAX_TRANSCRIPT_CHARS);
+      const truncated = body.length > MAX_TRANSCRIPT_CHARS;
+      const mirrored: DatahouseRow[] = [];
 
       const res = await ai.messages.create({
         model: ANALYSIS_MODEL,
@@ -150,14 +193,14 @@ export async function analyzePending(limit = 10): Promise<AnalyzeResult> {
         messages: [
           {
             role: "user",
-            content: `EXISTING INITIATIVE REGISTRY:\n${compactRegistry(registry)}\n\n---\n\nMEETING: ${t.title}\nDATE: ${t.occurred_at}\nSOURCE: ${t.source}\n\nTRANSCRIPT:\n${transcript}${truncated ? "\n\n[transcript truncated]" : ""}`,
+            content: `EXISTING INITIATIVE REGISTRY:\n${compactRegistry(registry)}\n\n---\n\nMEETING: ${t.title}\nDATE: ${t.occurred_at}\nSOURCE: ${usedSource}\n\nTRANSCRIPT:\n${transcript}${truncated ? "\n\n[transcript truncated]" : ""}`,
           },
         ],
       });
 
       const block = res.content.find((c) => c.type === "tool_use");
       if (!block || block.type !== "tool_use") {
-        out.errors.push(`${t.id}: model returned no analysis`);
+        out.errors.push(`${t.archive_key}: model returned no analysis`);
         continue;
       }
       const parsed = block.input as { brief: string; operations: Operation[] };
@@ -183,12 +226,14 @@ export async function analyzePending(limit = 10): Promise<AnalyzeResult> {
                 seenAt,
               });
           if (row) {
+            const changeNote = op.changeNote ?? (existing ? null : "First raised in this meeting.");
             await addMention({
               initiativeId: row.id,
-              meetingId: t.meeting_id,
+              meetingId: t.id,
               excerpt: op.excerpt,
-              changeNote: op.changeNote ?? (existing ? null : "First raised in this meeting."),
+              changeNote,
             });
+            mirrored.push(toDatahouseRow(row, op, t, changeNote));
             if (existing) out.updated++;
             else out.created++;
           }
@@ -196,7 +241,7 @@ export async function analyzePending(limit = 10): Promise<AnalyzeResult> {
         }
 
         if (!op.slug) {
-          out.errors.push(`${t.id}: ${op.op} without slug`);
+          out.errors.push(`${t.archive_key}: ${op.op} without slug`);
           continue;
         }
         const status: InitiativeStatus | undefined = op.op === "close" ? op.status ?? "completed" : undefined;
@@ -208,24 +253,59 @@ export async function analyzePending(limit = 10): Promise<AnalyzeResult> {
           seenAt,
         });
         if (!row) {
-          out.errors.push(`${t.id}: unknown slug "${op.slug}"`);
+          out.errors.push(`${t.archive_key}: unknown slug "${op.slug}"`);
           continue;
         }
         await addMention({
           initiativeId: row.id,
-          meetingId: t.meeting_id,
+          meetingId: t.id,
           excerpt: op.excerpt,
           changeNote: op.changeNote ?? null,
         });
+        mirrored.push(toDatahouseRow(row, op, t, op.changeNote ?? null));
         if (op.op === "close") out.closed++;
         else out.updated++;
       }
 
-      await markTranscriptAnalyzed(t.id, parsed.brief ?? "");
+      const brief = parsed.brief ?? "";
+      await markMeetingAnalyzed(t.id, brief);
+
+      // Mirror the extracted layer back into the archive so the spreadsheet
+      // stays the system of record — a rebuilt database loses nothing. Mirror
+      // failures are reported but don't undo the analysis, which is already
+      // durable in Postgres.
+      try {
+        if (mirrored.length) await upsertDatahouseRows(mirrored);
+        await writeBrief(t.archive_key, brief);
+      } catch (e) {
+        out.errors.push(`mirror/${t.archive_key}: ${e instanceof Error ? e.message : String(e)}`);
+      }
+
       out.analyzed++;
     } catch (e) {
-      out.errors.push(`${t.id}: ${e instanceof Error ? e.message : String(e)}`);
+      out.errors.push(`${t.archive_key}: ${e instanceof Error ? e.message : String(e)}`);
     }
   }
   return out;
+}
+
+/** Shape one reconciliation operation as a traceable Datahouse row. */
+function toDatahouseRow(
+  row: Initiative,
+  op: Operation,
+  meeting: ArchivedMeeting,
+  changeNote: string | null,
+): DatahouseRow {
+  return {
+    slug: row.slug,
+    title: row.title,
+    summary: op.summary?.trim() || row.summary,
+    horizon: op.horizon ?? row.horizon,
+    status: op.op === "close" ? op.status ?? "completed" : row.status,
+    owner: op.owner ?? row.owner ?? "",
+    meetingKey: meeting.archive_key,
+    meetingDate: meeting.occurred_at.slice(0, 10),
+    excerpt: op.excerpt,
+    changeNote: changeNote ?? "",
+  };
 }

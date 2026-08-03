@@ -57,6 +57,40 @@ back an embedded app. One **shared AMG API key** (its own org/billing, separate 
 personal Claude.ai accounts) powers AI for all dashboard users; partners do not each
 need an AI account. Model: `claude-opus-4-8` (see [`src/lib/ai.ts`](src/lib/ai.ts)).
 
+## Meeting archive
+
+The meeting record lives in **Google Drive**, not Postgres. One Drive folder holds
+everything:
+
+```
+<archive folder>/
+  Meeting Database        ← spreadsheet: Database / Datahouse / Historical / Categories / _state
+  Gemini/    GROWTH_20260715_140000-150000.txt
+  Fathom/    GROWTH_20260715_140000-150000.txt
+  Notion/    …
+  ClickUp/   …
+```
+
+Naming: `CATEGORY_YYYYMMDD_HHMMSS-HHMMSS`, always in **America/New_York**.
+Category comes from a closed vocabulary (the `Categories` tab, editable without a
+deploy). A meeting with no stated end time repeats its start time and is flagged
+`duration_known = FALSE` rather than assuming a length.
+
+Every service that recorded a meeting keeps its own file, so the archive is
+complete; the spreadsheet holds **one row per meeting** naming which file was
+analyzed, so initiatives aren't counted twice.
+
+**Postgres is a cache, not a second source of truth.** It holds the live initiative
+registry and small structured meeting rows (no transcript text) and can be rebuilt
+from Drive at any time.
+
+Backfill runs from a workstation, never the web server:
+
+```bash
+pnpm backfill:meetings -- --from=2024-01-01 --dry-run   # count first, writes nothing
+pnpm backfill:meetings -- --from=2024-01-01             # resumable, idempotent
+```
+
 ## Data placement conventions
 
 Each tool has one job. Put data where it belongs:

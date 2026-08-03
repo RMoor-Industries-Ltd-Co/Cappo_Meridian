@@ -27,10 +27,14 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}) as Record<string, unknown>);
   const lookbackDays = Number(body.lookbackDays) || undefined;
   const analyze = body.analyze !== false;
+  // `dryRun` reports what a sweep would find without writing to the archive —
+  // the safe way to size a window before committing to it.
+  const dryRun = body.dryRun === true;
 
   try {
-    const ingest = await ingestMeetings(lookbackDays);
-    const analysis = analyze ? await analyzePending(10) : null;
+    const ingest = await ingestMeetings({ lookbackDays, dryRun });
+    // A dry run must stay read-only end to end, so analysis is skipped too.
+    const analysis = analyze && !dryRun ? await analyzePending(10) : null;
     return NextResponse.json({ ingest, analysis });
   } catch (err) {
     if (isNotConnected(err)) {

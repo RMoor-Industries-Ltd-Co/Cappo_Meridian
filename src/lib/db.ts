@@ -65,6 +65,15 @@ async function ensureSchema(p: Pool): Promise<void> {
         );
         CREATE INDEX IF NOT EXISTS idx_call_logs_supplier ON call_logs(supplier_id, id DESC);
 
+        -- Google OAuth credentials, keyed by account. Lives in Postgres rather
+        -- than a file so tokens survive a container redeploy, and so more than
+        -- one Workspace account can be connected at once.
+        CREATE TABLE IF NOT EXISTS google_tokens (
+          account       TEXT PRIMARY KEY,
+          data          TEXT NOT NULL,
+          updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+        );
+
         -- ── Meeting intelligence ──────────────────────────────────────
         CREATE TABLE IF NOT EXISTS meetings (
           id            BIGSERIAL PRIMARY KEY,
@@ -128,6 +137,21 @@ async function ensureSchema(p: Pool): Promise<void> {
           sent_at       TIMESTAMPTZ,
           created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
         );
+        -- The archive moved transcript BODIES to Drive; these columns keep the
+        -- small structured facts Postgres still needs (the initiative registry
+        -- foreign-keys to meetings, and analysis needs to know which archived
+        -- file to read and whether it has been processed). Added via ALTER
+        -- because CREATE TABLE IF NOT EXISTS won't touch an existing table.
+        ALTER TABLE meetings ADD COLUMN IF NOT EXISTS archive_key     TEXT;
+        ALTER TABLE meetings ADD COLUMN IF NOT EXISTS category        TEXT;
+        ALTER TABLE meetings ADD COLUMN IF NOT EXISTS analyzed_source TEXT;
+        ALTER TABLE meetings ADD COLUMN IF NOT EXISTS brief           TEXT;
+        ALTER TABLE meetings ADD COLUMN IF NOT EXISTS analyzed_at     TIMESTAMPTZ;
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_meetings_archive_key
+          ON meetings(archive_key) WHERE archive_key IS NOT NULL;
+        CREATE INDEX IF NOT EXISTS idx_meetings_unanalyzed
+          ON meetings(occurred_at) WHERE analyzed_at IS NULL AND archive_key IS NOT NULL;
+
         CREATE INDEX IF NOT EXISTS idx_transcripts_meeting ON meeting_transcripts(meeting_id, rank);
         CREATE INDEX IF NOT EXISTS idx_transcripts_pending ON meeting_transcripts(analyzed_at) WHERE analyzed_at IS NULL;
         CREATE INDEX IF NOT EXISTS idx_mentions_initiative ON initiative_mentions(initiative_id, id DESC);
@@ -505,6 +529,82 @@ export async function pendingTranscripts(limit = 10): Promise<(MeetingTranscript
     [limit],
   );
   return rows;
+}
+
+// ── Archive-backed meetings ──────────────────────────────────────────
+// The Drive archive is the system of record. These rows are a rebuildable
+// cache: enough structure for the initiative registry to reference a meeting
+// and for analysis to find its transcript, with no transcript text stored.
+
+export interface ArchivedMeeting {
+  id: string;
+  archive_key: string;
+  title: string;
+  occurred_at: string;
+  category: string | null;
+  analyzed_source: string | null;
+}
+
+/** Mirror one archived meeting into Postgres. Idempotent on dedup_key. */
+export async function upsertArchivedMeeting(m: {
+  archiveKey: string;
+  title: string;
+  occurredAt: string;
+  dedupKey: string;
+  participants?: string[];
+  category?: string;
+  analyzedSource?: string;
+}): Promise<string | null> {
+  const p = await db();
+  if (!p) return null;
+  const { rows } = await p.query<{ id: string }>(
+    `INSERT INTO meetings (title, occurred_at, dedup_key, participants,
+                           archive_key, category, analyzed_source)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+     ON CONFLICT (dedup_key) DO UPDATE SET
+       title           = EXCLUDED.title,
+       occurred_at     = EXCLUDED.occurred_at,
+       participants    = EXCLUDED.participants,
+       archive_key     = EXCLUDED.archive_key,
+       category        = EXCLUDED.category,
+       analyzed_source = EXCLUDED.analyzed_source
+     RETURNING id::text`,
+    [
+      m.title,
+      m.occurredAt,
+      m.dedupKey,
+      m.participants ?? null,
+      m.archiveKey,
+      m.category ?? null,
+      m.analyzedSource ?? null,
+    ],
+  );
+  return rows[0]?.id ?? null;
+}
+
+/**
+ * Archived meetings awaiting analysis, oldest first — the registry has to
+ * evolve in the order meetings actually happened, or a later meeting's context
+ * would be applied before the earlier one that established it.
+ */
+export async function pendingArchivedMeetings(limit = 10): Promise<ArchivedMeeting[]> {
+  const p = await db();
+  if (!p) return [];
+  const { rows } = await p.query<ArchivedMeeting>(
+    `SELECT id::text, archive_key, title, occurred_at::text, category, analyzed_source
+       FROM meetings
+      WHERE analyzed_at IS NULL AND archive_key IS NOT NULL
+      ORDER BY occurred_at ASC
+      LIMIT $1`,
+    [limit],
+  );
+  return rows;
+}
+
+export async function markMeetingAnalyzed(id: string, brief: string): Promise<void> {
+  const p = await db();
+  if (!p) return;
+  await p.query(`UPDATE meetings SET brief = $1, analyzed_at = now() WHERE id = $2`, [brief, id]);
 }
 
 export async function markTranscriptAnalyzed(id: string, brief: string): Promise<void> {
