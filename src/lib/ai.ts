@@ -66,7 +66,10 @@ const claudeProvider: AiProvider = {
     const run = anthropic.messages.stream({
       model: model || CLAUDE_DEFAULT_MODEL,
       max_tokens: 8000,
-      system: AI_SYSTEM_PROMPT,
+      // Prompt caching — AI_SYSTEM_PROMPT is a stable constant re-sent on every turn, so
+      // mark it with an ephemeral cache_control breakpoint and pay ~1/10th on the repeated
+      // prefix. The conversation messages stay uncached after the breakpoint.
+      system: [{ type: "text", text: AI_SYSTEM_PROMPT, cache_control: { type: "ephemeral" } }],
       messages: messages.map((m) => ({ role: m.role, content: m.content })),
     });
     run.on("text", (delta) => onDelta(delta));
