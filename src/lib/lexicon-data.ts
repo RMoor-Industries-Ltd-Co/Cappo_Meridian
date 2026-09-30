@@ -520,3 +520,21 @@ export const LEXICON_TERMS: LexiconEntry[] = RAW_TERMS.map((t) => ({
 export const CATEGORIES: string[] = Array.from(
   new Set(LEXICON_TERMS.map((t) => t.category)),
 ).sort();
+
+/**
+ * Difficulty heuristic for the round-based training games (Term Match, Sentence
+ * Builder). There's no curated difficulty field in the Notion source, so this
+ * ranks by how compound/abstract a term reads: word count first (a single
+ * recognizable noun like "HVN" or "Sanctum" is easier than a multi-word phrase
+ * like "Atmospheric Jurisdiction" or "World Within Atlas Chamber"), then raw
+ * length as a tiebreaker. Lower score = easier/plainer, higher = more "creative."
+ */
+function difficultyScore(entry: Pick<LexiconEntry, "term" | "meaning">): number {
+  const wordCount = entry.term.trim().split(/\s+/).length;
+  return wordCount * 20 + entry.term.length + entry.meaning.length / 20;
+}
+
+/** Sorts terms from easiest/plainest to hardest/most creative (see difficultyScore). */
+export function rankByDifficulty(terms: LexiconEntry[]): LexiconEntry[] {
+  return [...terms].sort((a, b) => difficultyScore(a) - difficultyScore(b));
+}

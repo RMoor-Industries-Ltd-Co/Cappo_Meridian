@@ -8,19 +8,22 @@ interface ScoreBody {
   categories: string[];
   xp: number;
   timestamp: string;
+  /** Which training game this report came from — defaults to the original Quick Quiz. */
+  mode?: string;
 }
 
 export async function POST(req: NextRequest) {
   try {
     const body: ScoreBody = await req.json();
-    const { founder, score, total, categories, xp, timestamp } = body;
+    const { founder, score, total, categories, xp, timestamp, mode = "Quick Quiz" } = body;
 
     const date = new Date(timestamp);
-    const subject = `AMG Training Report — ${founder} — ${date.toLocaleDateString()}`;
+    const subject = `AMG Training Report — ${mode} — ${founder} — ${date.toLocaleDateString()}`;
 
     const emailBody = [
       "AMG LEXICON TRAINING REPORT",
       "============================",
+      `Mode: ${mode}`,
       `Founder: ${founder}`,
       `Date: ${date.toLocaleString()}`,
       `Score: ${score}/${total} (${Math.round((score / total) * 100)}%)`,

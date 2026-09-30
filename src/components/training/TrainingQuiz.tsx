@@ -5,6 +5,8 @@ import { Heart, CheckCircle } from "lucide-react";
 import type { LexiconEntry } from "@/lib/lexicon-data";
 import { USAGE_TF } from "@/lib/quiz-usage";
 import { ValeHost } from "./ValeHost";
+import { TermMatchGame } from "./TermMatchGame";
+import { SentenceBuilderGame } from "./SentenceBuilderGame";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -30,7 +32,15 @@ interface TrueFalseQuestion {
 }
 type Question = ChoiceQuestion | TrueFalseQuestion;
 
-type Screen = "start" | "quiz" | "results";
+type Screen = "start" | "quiz" | "results" | "match" | "sentence";
+
+type GameMode = "quick" | "match" | "sentence";
+
+const GAME_MODES: { key: GameMode; label: string; sub: string }[] = [
+  { key: "quick", label: "Quick Quiz", sub: "Multiple-choice & true/false" },
+  { key: "match", label: "Term Match", sub: "Timed matching, 10 rounds" },
+  { key: "sentence", label: "Sentence Builder", sub: "Fill in the blanks" },
+];
 
 // ─── Question generators ──────────────────────────────────────────────────────
 
@@ -113,6 +123,7 @@ export function TrainingQuiz({ terms: LEXICON_TERMS, categories: CATEGORIES }: T
   const [selectedCategories, setSelectedCategories] = useState<Set<string>>(new Set(CATEGORIES));
   const [founder, setFounder] = useState<"Founder 55" | "Founder 88">("Founder 55");
   const [advanced, setAdvanced] = useState(true);
+  const [gameMode, setGameMode] = useState<GameMode>("quick");
 
   // Quiz state
   const [screen, setScreen] = useState<Screen>("start");
@@ -154,6 +165,16 @@ export function TrainingQuiz({ terms: LEXICON_TERMS, categories: CATEGORIES }: T
   const beginSession = () => {
     const pool = LEXICON_TERMS.filter((t) => selectedCategories.has(t.category));
     if (pool.length < 2) return; // not enough terms
+
+    if (gameMode === "match") {
+      setScreen("match");
+      return;
+    }
+    if (gameMode === "sentence") {
+      setScreen("sentence");
+      return;
+    }
+
     // Up to 20 questions per round, drawn randomly from the bank (the generator
     // returns fewer only when the selected pool can't supply that many).
     const qs = generateQuestions(pool, 20, advanced);
@@ -167,6 +188,8 @@ export function TrainingQuiz({ terms: LEXICON_TERMS, categories: CATEGORIES }: T
     setScreen("quiz");
     setReportStatus("idle");
   };
+
+  const selectedPool = LEXICON_TERMS.filter((t) => selectedCategories.has(t.category));
 
   // ── Handle answer ────────────────────────────────────────────────
   const handleAnswer = useCallback(
@@ -300,6 +323,35 @@ export function TrainingQuiz({ terms: LEXICON_TERMS, categories: CATEGORIES }: T
               </div>
             </div>
 
+            {/* Game mode selector */}
+            <div>
+              <h2 className="text-xs font-semibold uppercase tracking-wider text-muted mb-3">Pick your training</h2>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                {GAME_MODES.map((mode) => (
+                  <button
+                    key={mode.key}
+                    onClick={() => setGameMode(mode.key)}
+                    className={[
+                      "rounded-xl border px-4 py-3 text-left transition-all",
+                      gameMode === mode.key
+                        ? "border-gold/60 bg-gold/10"
+                        : "border-border bg-panel hover:border-gold/30",
+                    ].join(" ")}
+                  >
+                    <span
+                      className={[
+                        "block text-sm font-semibold",
+                        gameMode === mode.key ? "text-gold" : "text-fg",
+                      ].join(" ")}
+                    >
+                      {mode.label}
+                    </span>
+                    <span className="block text-xs text-subtle">{mode.sub}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
             {/* Category selector */}
             <div>
               <h2 className="text-xs font-semibold uppercase tracking-wider text-muted mb-3">Categories</h2>
@@ -328,42 +380,45 @@ export function TrainingQuiz({ terms: LEXICON_TERMS, categories: CATEGORIES }: T
               </p>
             </div>
 
-            {/* Difficulty */}
-            <div>
-              <h2 className="text-xs font-semibold uppercase tracking-wider text-muted mb-3">Difficulty</h2>
-              <div className="flex gap-2">
-                {[
-                  { key: false, label: "Standard", sub: "Definitions" },
-                  { key: true, label: "Advanced", sub: "Usage & true/false" },
-                ].map((opt) => (
-                  <button
-                    key={String(opt.key)}
-                    onClick={() => setAdvanced(opt.key)}
-                    className={[
-                      "flex-1 rounded-xl border px-4 py-3 text-left transition-all",
-                      advanced === opt.key
-                        ? "border-gold/60 bg-gold/10"
-                        : "border-border bg-panel hover:border-gold/30",
-                    ].join(" ")}
-                  >
-                    <span
+            {/* Difficulty — Quick Quiz only; Term Match / Sentence Builder ramp
+                difficulty themselves across their fixed 10-round schedule. */}
+            {gameMode === "quick" && (
+              <div>
+                <h2 className="text-xs font-semibold uppercase tracking-wider text-muted mb-3">Difficulty</h2>
+                <div className="flex gap-2">
+                  {[
+                    { key: false, label: "Standard", sub: "Definitions" },
+                    { key: true, label: "Advanced", sub: "Usage & true/false" },
+                  ].map((opt) => (
+                    <button
+                      key={String(opt.key)}
+                      onClick={() => setAdvanced(opt.key)}
                       className={[
-                        "block text-sm font-semibold",
-                        advanced === opt.key ? "text-gold" : "text-fg",
+                        "flex-1 rounded-xl border px-4 py-3 text-left transition-all",
+                        advanced === opt.key
+                          ? "border-gold/60 bg-gold/10"
+                          : "border-border bg-panel hover:border-gold/30",
                       ].join(" ")}
                     >
-                      {opt.label}
-                    </span>
-                    <span className="block text-xs text-subtle">{opt.sub}</span>
-                  </button>
-                ))}
+                      <span
+                        className={[
+                          "block text-sm font-semibold",
+                          advanced === opt.key ? "text-gold" : "text-fg",
+                        ].join(" ")}
+                      >
+                        {opt.label}
+                      </span>
+                      <span className="block text-xs text-subtle">{opt.sub}</span>
+                    </button>
+                  ))}
+                </div>
               </div>
-            </div>
+            )}
 
             {/* Begin button */}
             <button
               onClick={beginSession}
-              disabled={LEXICON_TERMS.filter((t) => selectedCategories.has(t.category)).length < 2}
+              disabled={selectedPool.length < 2}
               className="w-full rounded-xl border border-gold/60 bg-gold/10 py-3 text-sm font-semibold text-gold hover:bg-gold/20 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
             >
               Begin Session
@@ -406,6 +461,30 @@ export function TrainingQuiz({ terms: LEXICON_TERMS, categories: CATEGORIES }: T
           </div>
         </div>
       </div>
+    );
+  }
+
+  // ── Render: Term Match game ───────────────────────────────────────
+  if (screen === "match") {
+    return (
+      <TermMatchGame
+        terms={selectedPool}
+        founder={founder}
+        categories={Array.from(selectedCategories)}
+        onExit={() => setScreen("start")}
+      />
+    );
+  }
+
+  // ── Render: Sentence Builder game ─────────────────────────────────
+  if (screen === "sentence") {
+    return (
+      <SentenceBuilderGame
+        terms={selectedPool}
+        founder={founder}
+        categories={Array.from(selectedCategories)}
+        onExit={() => setScreen("start")}
+      />
     );
   }
 
