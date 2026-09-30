@@ -62,7 +62,8 @@ export function buildSentenceBank(terms: LexiconEntry[]): TrainingSentence[] {
     const third = related[2] ?? second;
     const definitions: Array<Omit<TrainingSentence, "difficulty">> = [
       {
-        id: `${target.term}:direct:1`, target: target.term, text: target.example,
+        id: `${target.term}:direct:1`, target: target.term,
+        text: target.example.includes(target.term) ? target.example : `${target.term}: ${target.example}`,
         answers: [target.term], kind: "direct",
       },
       {
@@ -77,12 +78,12 @@ export function buildSentenceBank(terms: LexiconEntry[]): TrainingSentence[] {
       },
       {
         id: `${target.term}:context:2`, target: target.term,
-        text: `Within The Havenry, ${target.term}, ${first.term}, and ${second.term} support the room's composition.`,
+        text: `In the room, ${target.term}, ${first.term}, and ${second.term} support the composition.`,
         answers: [target.term, first.term, second.term], kind: "contextual",
       },
       {
         id: `${target.term}:context:3`, target: target.term,
-        text: `Under Atmospheric Jurisdiction, ${target.term}, ${first.term}, ${second.term}, and ${third.term} establish a controlled experience.`,
+        text: `During the presentation, ${target.term}, ${first.term}, ${second.term}, and ${third.term} establish a controlled experience.`,
         answers: [target.term, first.term, second.term, third.term], kind: "contextual",
       },
     ];
