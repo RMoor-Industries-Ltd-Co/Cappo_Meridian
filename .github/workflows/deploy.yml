@@ -3,6 +3,7 @@ name: CI & Deploy
 on:
   push:
     branches: [main]
+  pull_request:
   workflow_dispatch:
 
 concurrency:
@@ -28,6 +29,8 @@ jobs:
         run: pnpm exec tsc --noEmit
       - name: Lint
         run: pnpm lint
+      - name: Test
+        run: pnpm test
       - name: Build
         run: pnpm build
 
