@@ -273,6 +273,7 @@ function MatchRun({
             return (
               <button
                 key={card.term}
+                data-term={card.term}
                 disabled={isMatched}
                 onClick={() => pick("term", card.term)}
                 aria-pressed={isSelected}
@@ -300,6 +301,7 @@ function MatchRun({
             return (
               <button
                 key={card.term}
+                data-term={card.term}
                 disabled={isMatched}
                 onClick={() => pick("plain", card.term)}
                 aria-pressed={isSelected}

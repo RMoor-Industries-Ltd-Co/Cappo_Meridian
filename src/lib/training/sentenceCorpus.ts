@@ -48,7 +48,7 @@ export const CURATED_SENTENCES: LexiconSentenceExample[] = [
   {
     id: "aure:conversation:1",
     terms: ["Aure"],
-    text: "She noticed the Aure rising slowly before she ever saw the Ember Line itself.",
+    text: "Give it a minute — the Aure takes a moment to rise once the Ember Line is lit.",
     kind: "conversation",
     difficulty: 3,
     approved: true,
