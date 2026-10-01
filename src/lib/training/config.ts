@@ -80,6 +80,10 @@ export const CONVERSATION_DISTRACTORS_BY_DIFFICULTY: Record<number, number> = {
 };
 export const SENTENCE_XP_PER_CORRECT = 15;
 
+/** Word bank size bounds for Conversation's tap-to-place exercises (directive §9) — never fewer than 4, never more than 7. */
+export const WORD_BANK_MIN = 4;
+export const WORD_BANK_MAX = 7;
+
 // ─── Quick Quiz ─────────────────────────────────────────────────────────────
 
 export const QUICK_QUIZ_XP_PER_CORRECT = 10;
