@@ -4,7 +4,7 @@ import { gmailSend } from "@/lib/connectors/gmail";
 
 const scoreSchema = z.object({
   founder: z.enum(["Founder 55", "Founder 88"]),
-  mode: z.enum(["Quick Quiz", "Term Match", "Sentence Completion", "Master Quiz"]),
+  mode: z.enum(["Quick Quiz", "Lexicon-Lingo Match", "Lingo in Conversation", "Master's Game"]),
   score: z.number().int().nonnegative(),
   total: z.number().int().positive().max(500),
   categories: z.array(z.string().min(1).max(100)).min(1).max(20),
