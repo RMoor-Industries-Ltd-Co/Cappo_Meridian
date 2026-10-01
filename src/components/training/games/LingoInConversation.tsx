@@ -5,52 +5,97 @@ import { ArrowLeft } from "lucide-react";
 import type { TrainingGameProps } from "@/lib/training/registry";
 import {
   buildSentencePool,
+  buildWordBank,
+  blankOrder,
   maskSentence,
   selectSentencesForDifficulty,
+  selectSentencesForScenario,
   type LexiconSentenceExample,
 } from "@/lib/training/sentenceCorpus";
-import { CONVERSATION_DISTRACTORS_BY_DIFFICULTY, SENTENCE_XP_PER_CORRECT } from "@/lib/training/config";
-import { shuffle } from "@/lib/training/shuffle";
+import { SENTENCE_XP_PER_CORRECT } from "@/lib/training/config";
+import { TRAINING_AUDIENCES } from "@/lib/training/corpusText";
 
 const SESSION_LENGTH = 8;
+const SCENARIOS = ["Mixed", ...TRAINING_AUDIENCES] as const;
 
 function tierForIndex(index: number): number {
   // Ramps 1 -> 5 across the session, then holds at 5 for any remaining prompts.
   return Math.min(5, Math.floor(index / 2) + 1);
 }
 
-interface BankWord {
-  id: string;
-  label: string;
+function buildSession(pool: LexiconSentenceExample[]): LexiconSentenceExample[] {
+  const picks: LexiconSentenceExample[] = [];
+  const used = new Set<string>();
+  for (let i = 0; i < SESSION_LENGTH; i += 1) {
+    const tier = tierForIndex(i);
+    const targetDifficulty = tier * 2;
+    const candidates = pool.filter((s) => !used.has(s.id));
+    const [choice] = selectSentencesForDifficulty(candidates.length ? candidates : pool, targetDifficulty, 1);
+    if (!choice) break;
+    used.add(choice.id);
+    picks.push(choice);
+  }
+  return picks;
 }
 
 export function LingoInConversation({ terms, onExit }: TrainingGameProps) {
-  const pool = useMemo(() => buildSentencePool(terms), [terms]);
-  const [session] = useState<LexiconSentenceExample[]>(() => {
-    const picks: LexiconSentenceExample[] = [];
-    const used = new Set<string>();
-    for (let i = 0; i < SESSION_LENGTH; i += 1) {
-      const tier = tierForIndex(i);
-      const targetDifficulty = tier * 2;
-      const candidates = pool.filter((s) => !used.has(s.id));
-      const [choice] = selectSentencesForDifficulty(candidates.length ? candidates : pool, targetDifficulty, 1);
-      if (!choice) break;
-      used.add(choice.id);
-      picks.push(choice);
-    }
-    return picks;
-  });
+  const fullPool = useMemo(() => buildSentencePool(terms), [terms]);
+  const [scenario, setScenario] = useState<(typeof SCENARIOS)[number]>("Mixed");
+  const [session, setSession] = useState<LexiconSentenceExample[] | null>(null);
   const [index, setIndex] = useState(0);
   const [correctCount, setCorrectCount] = useState(0);
   const [done, setDone] = useState(false);
 
-  if (session.length === 0) {
+  if (fullPool.length === 0) {
     return (
       <div className="max-w-2xl pt-2 flex flex-col gap-4">
         <button onClick={onExit} className="flex items-center gap-2 text-xs text-muted">
           <ArrowLeft size={14} /> Training menu
         </button>
         <p className="text-sm text-subtle">Select categories with example sentences to play Lingo in Conversation.</p>
+      </div>
+    );
+  }
+
+  if (!session) {
+    return (
+      <div className="max-w-2xl pt-2 flex flex-col gap-6">
+        <button onClick={onExit} className="flex items-center gap-2 text-xs text-muted">
+          <ArrowLeft size={14} /> Training menu
+        </button>
+        <div>
+          <p className="text-xs uppercase tracking-wider text-muted">Lingo in Conversation</p>
+          <h1 className="mt-2 text-3xl font-bold text-gold">Practice speaking HVN naturally</h1>
+          <p className="mt-2 text-sm text-subtle">
+            Pick a professional scenario to focus on, or keep it mixed across every audience.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2" role="group" aria-label="Scenario">
+          {SCENARIOS.map((option) => (
+            <button
+              key={option}
+              onClick={() => setScenario(option)}
+              aria-pressed={scenario === option}
+              className={[
+                "rounded-lg border px-3 py-1.5 text-sm font-medium focus-visible:outline focus-visible:outline-2 focus-visible:outline-gold",
+                scenario === option
+                  ? "border-gold/60 bg-gold/10 text-gold"
+                  : "border-border bg-panel text-fg hover:border-gold/40",
+              ].join(" ")}
+            >
+              {option}
+            </button>
+          ))}
+        </div>
+        <button
+          onClick={() => {
+            const scoped = selectSentencesForScenario(fullPool, scenario);
+            setSession(buildSession(scoped.length ? scoped : fullPool));
+          }}
+          className="w-full rounded-xl border border-gold/60 bg-gold/10 py-3 text-sm font-semibold text-gold"
+        >
+          Start
+        </button>
       </div>
     );
   }
@@ -105,7 +150,8 @@ export function LingoInConversation({ terms, onExit }: TrainingGameProps) {
   );
 }
 
-function SentenceCard({
+/** Exported for direct testing of the tap-to-place/grading mechanic in isolation from session selection. */
+export function SentenceCard({
   sentence,
   terms,
   onSubmit,
@@ -116,33 +162,35 @@ function SentenceCard({
 }) {
   const masked = useMemo(() => maskSentence(sentence), [sentence]);
   const parts = masked.split(/(\{\{\d+\}\})/g);
-  const orderedTerms = useMemo(() => [...sentence.terms].sort((a, b) => b.length - a.length), [sentence]);
+  // Visual (left-to-right) blank order — NOT sentence.terms' length-sort order — so
+  // tapping a word fills the blank the learner is actually looking at next.
+  const order = useMemo(() => blankOrder(sentence), [sentence]);
+  const orderedTerms = useMemo(
+    () => [...sentence.terms].sort((a, b) => b.length - a.length),
+    [sentence],
+  );
 
-  const bank = useMemo<BankWord[]>(() => {
-    const distractorCount = CONVERSATION_DISTRACTORS_BY_DIFFICULTY[Math.min(5, Math.max(1, Math.ceil(sentence.difficulty / 2)))] ?? 3;
-    const distractors = shuffle(terms.filter((t) => !sentence.terms.includes(t.term)))
-      .slice(0, distractorCount)
-      .map((t) => t.term);
-    return shuffle([
-      ...orderedTerms.map((label, i) => ({ id: `correct:${i}:${label}`, label })),
-      ...distractors.map((label, i) => ({ id: `distractor:${i}:${label}`, label })),
-    ]);
-  }, [orderedTerms, sentence, terms]);
+  const bank = useMemo(
+    () => buildWordBank(sentence, terms).map((label, i) => ({ id: `${sentence.id}:${i}:${label}`, label })),
+    [sentence, terms],
+  );
 
+  // One slot per blank, indexed by its masked-sentence slot number (not visual position).
   const [placements, setPlacements] = useState<Array<string | null>>(() => orderedTerms.map(() => null));
   const [usedIds, setUsedIds] = useState<Set<string>>(new Set());
-  const [checked, setChecked] = useState(false);
+  const [graded, setGraded] = useState(false);
 
-  const place = (word: BankWord) => {
-    if (checked || usedIds.has(word.id)) return;
-    const slot = placements.findIndex((value) => value === null);
-    if (slot === -1) return;
+  const place = (word: { id: string; label: string }) => {
+    if (graded || usedIds.has(word.id)) return;
+    // Fill the first still-empty blank in reading order, not array order.
+    const slot = order.find((s) => placements[s] === null);
+    if (slot === undefined) return;
     setPlacements((current) => current.map((value, i) => (i === slot ? word.id : value)));
     setUsedIds((current) => new Set(current).add(word.id));
   };
 
   const clearSlot = (slot: number) => {
-    if (checked) return;
+    if (graded) return;
     const id = placements[slot];
     if (!id) return;
     setPlacements((current) => current.map((value, i) => (i === slot ? null : value)));
@@ -154,9 +202,10 @@ function SentenceCard({
   };
 
   const allFilled = placements.every((value) => value !== null);
-  const results = checked
+  const results = graded
     ? placements.map((id, i) => bank.find((w) => w.id === id)?.label === orderedTerms[i])
     : null;
+  const allCorrect = results?.every(Boolean) ?? false;
 
   return (
     <div className="rounded-2xl border border-border bg-panel p-6 flex flex-col gap-5">
@@ -172,10 +221,10 @@ function SentenceCard({
             <button
               key={i}
               onClick={() => clearSlot(slot)}
-              disabled={checked}
+              disabled={graded}
               className={[
                 "inline-block mx-1 rounded-lg border px-2 py-0.5 text-sm font-semibold align-baseline",
-                checked
+                graded
                   ? correctness
                     ? "border-gold/60 bg-gold/10 text-gold"
                     : "border-red-500/60 bg-red-500/10 text-red-400"
@@ -184,19 +233,19 @@ function SentenceCard({
                     : "border-dashed border-gold/40 text-muted",
               ].join(" ")}
             >
-              {label ?? `(${slot + 1})`}
+              {label ?? `(${orderedTerms.length > 1 ? order.indexOf(slot) + 1 : 1})`}
             </button>
           );
         })}
       </p>
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap gap-2" role="group" aria-label="Word bank">
         {bank.map((word) => {
           const used = usedIds.has(word.id);
           return (
             <button
               key={word.id}
               onClick={() => place(word)}
-              disabled={used || checked}
+              disabled={used || graded}
               className={[
                 "rounded-lg border px-3 py-1.5 text-sm font-medium focus-visible:outline focus-visible:outline-2 focus-visible:outline-gold",
                 used ? "border-border bg-panel-2 text-muted opacity-40" : "border-border bg-panel text-fg hover:border-gold/40",
@@ -207,20 +256,27 @@ function SentenceCard({
           );
         })}
       </div>
-      {checked ? (
-        <button
-          onClick={() => onSubmit(results?.every(Boolean) ?? false)}
-          className="w-full rounded-xl border border-gold/60 bg-gold/10 py-3 text-sm font-semibold text-gold"
-        >
-          Continue
-        </button>
+      {graded ? (
+        <div className="flex flex-col gap-3">
+          {!allCorrect && (
+            <p className="text-sm text-subtle">
+              Correct: <span className="text-fg">{sentence.text}</span>
+            </p>
+          )}
+          <button
+            onClick={() => onSubmit(allCorrect)}
+            className="w-full rounded-xl border border-gold/60 bg-gold/10 py-3 text-sm font-semibold text-gold"
+          >
+            Next
+          </button>
+        </div>
       ) : (
         <button
-          onClick={() => setChecked(true)}
+          onClick={() => setGraded(true)}
           disabled={!allFilled}
           className="w-full rounded-xl border border-gold/60 bg-gold/10 py-3 text-sm font-semibold text-gold disabled:opacity-40"
         >
-          Check
+          Continue
         </button>
       )}
     </div>
