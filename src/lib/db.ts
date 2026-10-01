@@ -97,6 +97,18 @@ async function ensureSchema(p: Pool): Promise<void> {
           generated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
           error         TEXT
         );
+
+        CREATE TABLE IF NOT EXISTS training_personal_bests (
+          founder             TEXT NOT NULL,
+          mode                TEXT NOT NULL,
+          highest_round       INT NOT NULL DEFAULT 0,
+          pairs_matched       INT NOT NULL DEFAULT 0,
+          accuracy            REAL NOT NULL DEFAULT 0,
+          max_bonus_bank_secs INT NOT NULL DEFAULT 0,
+          xp                  INT NOT NULL DEFAULT 0,
+          updated_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+          PRIMARY KEY (founder, mode)
+        );
       `)
       .then(() => undefined)
       .catch((e) => {
@@ -470,4 +482,73 @@ export async function getLastSuccessfulCappoReport(): Promise<
     `SELECT report_text, generated_at::text, error FROM cappo_reports WHERE report_text IS NOT NULL ORDER BY id DESC LIMIT 1`,
   );
   return rows[0] ?? null;
+}
+
+// ── Training personal bests ──────────────────────────────────────────
+// One row per (founder, mode). DATABASE_URL unset => db() returns null and
+// callers silently treat personal bests as "none yet" rather than failing —
+// Lexicon-Lingo Match must stay playable with no DB configured.
+export interface TrainingPersonalBest {
+  founder: string;
+  mode: string;
+  highest_round: number;
+  pairs_matched: number;
+  accuracy: number;
+  max_bonus_bank_secs: number;
+  xp: number;
+  updated_at: string;
+}
+
+export async function getPersonalBest(founder: string, mode: string): Promise<TrainingPersonalBest | null> {
+  const p = await db();
+  if (!p) return null;
+  const { rows } = await p.query<TrainingPersonalBest>(
+    `SELECT founder, mode, highest_round, pairs_matched, accuracy, max_bonus_bank_secs, xp, updated_at::text
+       FROM training_personal_bests WHERE founder = $1 AND mode = $2`,
+    [founder, mode],
+  );
+  return rows[0] ?? null;
+}
+
+/**
+ * Submits a run's result and returns the (possibly unchanged) personal best
+ * for this founder+mode, plus whether this particular run just set it. The
+ * server decides what counts as "better" (by `highest_round`, then by
+ * `pairs_matched` as a tiebreaker) rather than trusting a client-reported flag.
+ */
+export async function submitPersonalBest(
+  candidate: Omit<TrainingPersonalBest, "updated_at">,
+): Promise<{ best: TrainingPersonalBest; isNewBest: boolean }> {
+  const p = await db();
+  if (!p) throw new Error("Database not configured");
+  const existing = await getPersonalBest(candidate.founder, candidate.mode);
+  const isNewBest =
+    !existing ||
+    candidate.highest_round > existing.highest_round ||
+    (candidate.highest_round === existing.highest_round && candidate.pairs_matched > existing.pairs_matched);
+
+  if (!isNewBest) return { best: existing, isNewBest: false };
+
+  const { rows } = await p.query<TrainingPersonalBest>(
+    `INSERT INTO training_personal_bests (founder, mode, highest_round, pairs_matched, accuracy, max_bonus_bank_secs, xp, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, now())
+     ON CONFLICT (founder, mode) DO UPDATE SET
+       highest_round = EXCLUDED.highest_round,
+       pairs_matched = EXCLUDED.pairs_matched,
+       accuracy = EXCLUDED.accuracy,
+       max_bonus_bank_secs = EXCLUDED.max_bonus_bank_secs,
+       xp = EXCLUDED.xp,
+       updated_at = now()
+     RETURNING founder, mode, highest_round, pairs_matched, accuracy, max_bonus_bank_secs, xp, updated_at::text`,
+    [
+      candidate.founder,
+      candidate.mode,
+      candidate.highest_round,
+      candidate.pairs_matched,
+      candidate.accuracy,
+      candidate.max_bonus_bank_secs,
+      candidate.xp,
+    ],
+  );
+  return { best: rows[0], isNewBest: true };
 }
