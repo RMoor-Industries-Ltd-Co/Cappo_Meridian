@@ -32,6 +32,14 @@ export async function syncLexiconFromNotion(): Promise<LexiconSyncResult> {
         use: t.use,
         plainMeaning: t.plainMeaning,
         example: t.example,
+        trainingSentences: t.trainingSentences,
+        professionalScenarios: t.professionalScenarios,
+        transitionPhrases: t.transitionPhrases,
+        revealGuidance: t.revealGuidance,
+        wordBankDistractors: t.wordBankDistractors,
+        trainingAudiences: t.trainingAudiences,
+        trainingDifficulty: t.trainingDifficulty,
+        corpusStatus: t.corpusStatus,
       })),
     );
     await logLexiconSync({ added, updated, total: terms.length });
@@ -65,6 +73,14 @@ export async function getLexiconEntries(): Promise<{ terms: LexiconEntry[]; cate
       example: t.example ?? "",
       images: imagesForTerm(name),
       category: t.category,
+      trainingSentences: t.training_sentences,
+      professionalScenarios: t.professional_scenarios,
+      transitionPhrases: t.transition_phrases,
+      revealGuidance: t.reveal_guidance,
+      wordBankDistractors: t.word_bank_distractors,
+      trainingAudiences: t.training_audiences,
+      trainingDifficulty: t.training_difficulty,
+      corpusStatus: (t.corpus_status as LexiconEntry["corpusStatus"]) ?? "seed",
     };
   });
   const categories = Array.from(new Set(terms.map((t) => t.category))).sort();

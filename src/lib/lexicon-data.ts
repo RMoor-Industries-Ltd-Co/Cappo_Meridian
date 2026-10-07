@@ -13,6 +13,20 @@ export interface LexiconEntry {
   /** Proxy paths for this term's image gallery (see TERM_IMAGES). */
   images?: string[];
   category: string;
+  /**
+   * Training-corpus fields synced from the Notion Lexicon database (Lexicon-Lingo
+   * Conversation Corpus directive §4-5) — absent (undefined) for the static bundled
+   * list and for any term not yet enriched in Notion. Never used to infer or rewrite
+   * the canonical meaning/use/plain/example fields above.
+   */
+  trainingSentences?: string[];
+  professionalScenarios?: string[];
+  transitionPhrases?: string[];
+  revealGuidance?: string | null;
+  wordBankDistractors?: string[];
+  trainingAudiences?: string[];
+  trainingDifficulty?: number | null;
+  corpusStatus?: "seed" | "review" | "approved";
 }
 
 const CATEGORY_RULES: [RegExp, string][] = [

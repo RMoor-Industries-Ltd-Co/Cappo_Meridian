@@ -82,6 +82,17 @@ async function ensureSchema(p: Pool): Promise<void> {
           created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
           updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
         );
+        -- Training-corpus fields (Lexicon-Lingo Conversation Corpus directive §5) — additive,
+        -- nullable, backward-compatible: a term synced before these existed just has nulls/[]
+        -- until the next Notion sync fills them in.
+        ALTER TABLE lexicon_terms ADD COLUMN IF NOT EXISTS training_sentences JSONB NOT NULL DEFAULT '[]'::jsonb;
+        ALTER TABLE lexicon_terms ADD COLUMN IF NOT EXISTS professional_scenarios JSONB NOT NULL DEFAULT '[]'::jsonb;
+        ALTER TABLE lexicon_terms ADD COLUMN IF NOT EXISTS transition_phrases JSONB NOT NULL DEFAULT '[]'::jsonb;
+        ALTER TABLE lexicon_terms ADD COLUMN IF NOT EXISTS reveal_guidance TEXT;
+        ALTER TABLE lexicon_terms ADD COLUMN IF NOT EXISTS word_bank_distractors JSONB NOT NULL DEFAULT '[]'::jsonb;
+        ALTER TABLE lexicon_terms ADD COLUMN IF NOT EXISTS training_audiences JSONB NOT NULL DEFAULT '[]'::jsonb;
+        ALTER TABLE lexicon_terms ADD COLUMN IF NOT EXISTS training_difficulty INT;
+        ALTER TABLE lexicon_terms ADD COLUMN IF NOT EXISTS corpus_status TEXT NOT NULL DEFAULT 'seed';
         CREATE TABLE IF NOT EXISTS lexicon_sync_runs (
           id            BIGSERIAL PRIMARY KEY,
           ran_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -96,6 +107,18 @@ async function ensureSchema(p: Pool): Promise<void> {
           report_text   TEXT,
           generated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
           error         TEXT
+        );
+
+        CREATE TABLE IF NOT EXISTS training_personal_bests (
+          founder             TEXT NOT NULL,
+          mode                TEXT NOT NULL,
+          highest_round       INT NOT NULL DEFAULT 0,
+          pairs_matched       INT NOT NULL DEFAULT 0,
+          accuracy            REAL NOT NULL DEFAULT 0,
+          max_bonus_bank_secs INT NOT NULL DEFAULT 0,
+          xp                  INT NOT NULL DEFAULT 0,
+          updated_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+          PRIMARY KEY (founder, mode)
         );
       `)
       .then(() => undefined)
@@ -365,13 +388,23 @@ export interface StoredLexiconTerm {
   use_case: string | null;
   plain_meaning: string | null;
   example: string | null;
+  training_sentences: string[];
+  professional_scenarios: string[];
+  transition_phrases: string[];
+  reveal_guidance: string | null;
+  word_bank_distractors: string[];
+  training_audiences: string[];
+  training_difficulty: number | null;
+  corpus_status: string;
 }
 
 export async function listLexiconTerms(): Promise<StoredLexiconTerm[]> {
   const p = await db();
   if (!p) return [];
   const { rows } = await p.query<StoredLexiconTerm>(
-    `SELECT id, name, category, meaning, use_case, plain_meaning, example
+    `SELECT id, name, category, meaning, use_case, plain_meaning, example,
+            training_sentences, professional_scenarios, transition_phrases, reveal_guidance,
+            word_bank_distractors, training_audiences, training_difficulty, corpus_status
        FROM lexicon_terms ORDER BY name ASC`,
   );
   return rows;
@@ -385,6 +418,14 @@ interface UpsertLexiconTermInput {
   use: string;
   plainMeaning: string;
   example: string;
+  trainingSentences: string[];
+  professionalScenarios: string[];
+  transitionPhrases: string[];
+  revealGuidance: string | null;
+  wordBankDistractors: string[];
+  trainingAudiences: string[];
+  trainingDifficulty: number | null;
+  corpusStatus: string;
 }
 
 /** Upsert each term by its Notion block id. Returns how many were newly inserted vs updated. */
@@ -397,14 +438,32 @@ export async function upsertLexiconTerms(
   let updated = 0;
   for (const t of terms) {
     const { rows } = await p.query<{ inserted: boolean }>(
-      `INSERT INTO lexicon_terms (id, name, category, meaning, use_case, plain_meaning, example, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, now())
+      `INSERT INTO lexicon_terms (
+           id, name, category, meaning, use_case, plain_meaning, example,
+           training_sentences, professional_scenarios, transition_phrases, reveal_guidance,
+           word_bank_distractors, training_audiences, training_difficulty, corpus_status, updated_at
+         )
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, now())
        ON CONFLICT (id) DO UPDATE SET
          name = EXCLUDED.name, category = EXCLUDED.category, meaning = EXCLUDED.meaning,
          use_case = EXCLUDED.use_case, plain_meaning = EXCLUDED.plain_meaning, example = EXCLUDED.example,
+         training_sentences = EXCLUDED.training_sentences,
+         professional_scenarios = EXCLUDED.professional_scenarios,
+         transition_phrases = EXCLUDED.transition_phrases,
+         reveal_guidance = EXCLUDED.reveal_guidance,
+         word_bank_distractors = EXCLUDED.word_bank_distractors,
+         training_audiences = EXCLUDED.training_audiences,
+         training_difficulty = EXCLUDED.training_difficulty,
+         corpus_status = EXCLUDED.corpus_status,
          updated_at = now()
        RETURNING (xmax = 0) AS inserted`,
-      [t.id, t.name, t.category, t.meaning, t.use, t.plainMeaning, t.example],
+      [
+        t.id, t.name, t.category, t.meaning, t.use, t.plainMeaning, t.example,
+        JSON.stringify(t.trainingSentences), JSON.stringify(t.professionalScenarios),
+        JSON.stringify(t.transitionPhrases), t.revealGuidance,
+        JSON.stringify(t.wordBankDistractors), JSON.stringify(t.trainingAudiences),
+        t.trainingDifficulty, t.corpusStatus,
+      ],
     );
     if (rows[0]?.inserted) added += 1;
     else updated += 1;
@@ -470,4 +529,73 @@ export async function getLastSuccessfulCappoReport(): Promise<
     `SELECT report_text, generated_at::text, error FROM cappo_reports WHERE report_text IS NOT NULL ORDER BY id DESC LIMIT 1`,
   );
   return rows[0] ?? null;
+}
+
+// ── Training personal bests ──────────────────────────────────────────
+// One row per (founder, mode). DATABASE_URL unset => db() returns null and
+// callers silently treat personal bests as "none yet" rather than failing —
+// Lexicon-Lingo Match must stay playable with no DB configured.
+export interface TrainingPersonalBest {
+  founder: string;
+  mode: string;
+  highest_round: number;
+  pairs_matched: number;
+  accuracy: number;
+  max_bonus_bank_secs: number;
+  xp: number;
+  updated_at: string;
+}
+
+export async function getPersonalBest(founder: string, mode: string): Promise<TrainingPersonalBest | null> {
+  const p = await db();
+  if (!p) return null;
+  const { rows } = await p.query<TrainingPersonalBest>(
+    `SELECT founder, mode, highest_round, pairs_matched, accuracy, max_bonus_bank_secs, xp, updated_at::text
+       FROM training_personal_bests WHERE founder = $1 AND mode = $2`,
+    [founder, mode],
+  );
+  return rows[0] ?? null;
+}
+
+/**
+ * Submits a run's result and returns the (possibly unchanged) personal best
+ * for this founder+mode, plus whether this particular run just set it. The
+ * server decides what counts as "better" (by `highest_round`, then by
+ * `pairs_matched` as a tiebreaker) rather than trusting a client-reported flag.
+ */
+export async function submitPersonalBest(
+  candidate: Omit<TrainingPersonalBest, "updated_at">,
+): Promise<{ best: TrainingPersonalBest; isNewBest: boolean }> {
+  const p = await db();
+  if (!p) throw new Error("Database not configured");
+  const existing = await getPersonalBest(candidate.founder, candidate.mode);
+  const isNewBest =
+    !existing ||
+    candidate.highest_round > existing.highest_round ||
+    (candidate.highest_round === existing.highest_round && candidate.pairs_matched > existing.pairs_matched);
+
+  if (!isNewBest) return { best: existing, isNewBest: false };
+
+  const { rows } = await p.query<TrainingPersonalBest>(
+    `INSERT INTO training_personal_bests (founder, mode, highest_round, pairs_matched, accuracy, max_bonus_bank_secs, xp, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, now())
+     ON CONFLICT (founder, mode) DO UPDATE SET
+       highest_round = EXCLUDED.highest_round,
+       pairs_matched = EXCLUDED.pairs_matched,
+       accuracy = EXCLUDED.accuracy,
+       max_bonus_bank_secs = EXCLUDED.max_bonus_bank_secs,
+       xp = EXCLUDED.xp,
+       updated_at = now()
+     RETURNING founder, mode, highest_round, pairs_matched, accuracy, max_bonus_bank_secs, xp, updated_at::text`,
+    [
+      candidate.founder,
+      candidate.mode,
+      candidate.highest_round,
+      candidate.pairs_matched,
+      candidate.accuracy,
+      candidate.max_bonus_bank_secs,
+      candidate.xp,
+    ],
+  );
+  return { best: rows[0], isNewBest: true };
 }
