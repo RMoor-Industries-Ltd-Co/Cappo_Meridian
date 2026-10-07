@@ -1,12 +1,10 @@
 import { Client } from "@notionhq/client";
 import { env } from "@/lib/env";
-import { HVN_LEXICON_PAGE } from "@/lib/notionSchema";
+import { NOTION_DS } from "@/lib/notionSchema";
 import {
   splitEntries,
   splitTags,
-  parseTrainingAudiences,
   parseCorpusStatus,
-  parseTrainingDifficulty,
   type TrainingAudience,
   type CorpusStatus,
 } from "@/lib/training/corpusText";
@@ -30,14 +28,18 @@ export interface LexiconTerm {
   corpusStatus: CorpusStatus;
 }
 
-type AnyBlock = {
+interface NProp {
+  type?: string;
+  title?: { plain_text: string }[];
+  rich_text?: { plain_text: string }[];
+  select?: { name: string } | null;
+  multi_select?: { name: string }[];
+  number?: number | null;
+}
+interface NRow {
   id: string;
-  type: string;
-  has_children?: boolean;
-  [key: string]: unknown;
-};
-
-type RichTextToken = { plain_text: string };
+  properties: Record<string, NProp>;
+}
 
 let client: Client | null = null;
 function getClient(): Client {
@@ -46,105 +48,27 @@ function getClient(): Client {
   return client;
 }
 
-/** Fetch all blocks from a page, handling Notion cursor pagination. */
-async function listAllBlocks(blockId: string): Promise<AnyBlock[]> {
-  const results: AnyBlock[] = [];
+const plain = (rt?: { plain_text: string }[]) => (rt ?? []).map((t) => t.plain_text).join("");
+const titleOf = (r: NRow, key: string) => plain(r.properties[key]?.title).trim();
+const textOf = (r: NRow, key: string) => plain(r.properties[key]?.rich_text).trim();
+const selectOf = (r: NRow, key: string) => r.properties[key]?.select?.name ?? null;
+const multiSelectOf = (r: NRow, key: string) => (r.properties[key]?.multi_select ?? []).map((o) => o.name);
+const numberOf = (r: NRow, key: string) => r.properties[key]?.number ?? null;
+
+/** Fetch every row of a Notion data source, handling cursor pagination. */
+async function queryAllRows(dataSourceId: string): Promise<NRow[]> {
+  const results: NRow[] = [];
   let cursor: string | undefined;
   do {
-    const res = await getClient().blocks.children.list({
-      block_id: blockId,
+    const res = await getClient().dataSources.query({
+      data_source_id: dataSourceId,
       page_size: 100,
       ...(cursor ? { start_cursor: cursor } : {}),
-    });
-    results.push(...(res.results as unknown as AnyBlock[]));
+    } as Parameters<Client["dataSources"]["query"]>[0]);
+    results.push(...(res.results as unknown as NRow[]));
     cursor = res.next_cursor ?? undefined;
   } while (cursor);
   return results;
-}
-
-const joinRt = (rt: RichTextToken[]) => rt.map((t) => t.plain_text).join("").trim();
-
-interface ParsedBullets {
-  meaning: string;
-  use: string;
-  plainMeaning: string;
-  example: string;
-  trainingSentences: string[];
-  professionalScenarios: string[];
-  transitionPhrases: string[];
-  revealGuidance: string | null;
-  wordBankDistractors: string[];
-  trainingAudiences: TrainingAudience[];
-  trainingDifficulty: number | null;
-  corpusStatus: CorpusStatus;
-}
-
-/**
- * Field labels for the new training-corpus bullets (directive §4). Matched the same
- * way the original Meaning:/Use:/Plain Meaning:/Example: bullets already are — a
- * bullet item whose text starts with "Label:" contributes everything after the colon.
- * A field's bullet may be repeated (each occurrence appends) or hold multiple
- * newline-separated lines in one bullet (Notion shift-enter) — both are supported via
- * `splitEntries`/`splitTags`.
- */
-const LIST_FIELD_LABELS: { re: RegExp; key: "trainingSentences" | "professionalScenarios" | "transitionPhrases" | "wordBankDistractors"; split: (raw: string) => string[] }[] = [
-  { re: /^training sentences?:\s*/i, key: "trainingSentences", split: splitEntries },
-  { re: /^professional scenarios?:\s*/i, key: "professionalScenarios", split: splitTags },
-  { re: /^transition phrases?:\s*/i, key: "transitionPhrases", split: splitEntries },
-  { re: /^word bank distractors?:\s*/i, key: "wordBankDistractors", split: splitTags },
-];
-
-/** Parse the bullet items inside a toggle block into term fields. */
-function parseBullets(bullets: AnyBlock[]): ParsedBullets {
-  let meaning = "", use = "", plainMeaning = "", example = "";
-  let awaitExample = false;
-  let revealGuidanceRaw: string | null = null;
-  let trainingAudiencesRaw: string | null = null;
-  let trainingDifficultyRaw: string | null = null;
-  let corpusStatusRaw: string | null = null;
-  const lists: Record<"trainingSentences" | "professionalScenarios" | "transitionPhrases" | "wordBankDistractors", string[]> = {
-    trainingSentences: [],
-    professionalScenarios: [],
-    transitionPhrases: [],
-    wordBankDistractors: [],
-  };
-
-  for (const b of bullets) {
-    if (b.type !== "bulleted_list_item") continue;
-    const rt = ((b.bulleted_list_item as { rich_text?: RichTextToken[] })?.rich_text ?? []);
-    const text = joinRt(rt);
-
-    if (/^meaning:/i.test(text)) { meaning = text.replace(/^meaning:\s*/i, ""); continue; }
-    if (/^use:/i.test(text)) { use = text.replace(/^use:\s*/i, ""); continue; }
-    if (/^plain meaning:/i.test(text)) { plainMeaning = text.replace(/^plain meaning:\s*/i, ""); continue; }
-    if (/^example:?$/i.test(text)) { awaitExample = true; continue; }
-    if (awaitExample && text) { example = text.replace(/^`|`$/g, "").trim(); awaitExample = false; continue; }
-
-    if (/^reveal guidance:\s*/i.test(text)) { revealGuidanceRaw = text.replace(/^reveal guidance:\s*/i, ""); continue; }
-    if (/^training audiences?:\s*/i.test(text)) { trainingAudiencesRaw = text.replace(/^training audiences?:\s*/i, ""); continue; }
-    if (/^training difficulty:\s*/i.test(text)) { trainingDifficultyRaw = text.replace(/^training difficulty:\s*/i, ""); continue; }
-    if (/^corpus status:\s*/i.test(text)) { corpusStatusRaw = text.replace(/^corpus status:\s*/i, ""); continue; }
-
-    const listField = LIST_FIELD_LABELS.find(({ re }) => re.test(text));
-    if (listField) {
-      lists[listField.key].push(...listField.split(text.replace(listField.re, "")));
-    }
-  }
-
-  return {
-    meaning,
-    use,
-    plainMeaning,
-    example,
-    trainingSentences: lists.trainingSentences,
-    professionalScenarios: lists.professionalScenarios,
-    transitionPhrases: lists.transitionPhrases,
-    revealGuidance: revealGuidanceRaw,
-    wordBankDistractors: lists.wordBankDistractors,
-    trainingAudiences: parseTrainingAudiences(trainingAudiencesRaw),
-    trainingDifficulty: parseTrainingDifficulty(trainingDifficultyRaw),
-    corpusStatus: parseCorpusStatus(corpusStatusRaw),
-  };
 }
 
 const CATEGORY_RULES: [RegExp, string][] = [
@@ -163,30 +87,40 @@ function categorize(name: string): string {
 
 const SKIP_TERMS = new Set(["current note hierarchy"]);
 
-/** Fetch and parse all terms from the HVN Lexicon Notion page. */
+/**
+ * Fetch and parse all terms from the Lexicon Official Database (Conversation Corpus
+ * Integration follow-up directive — "the Text Reference remains terminology authority,
+ * but the Lexicon Official Database is the operational training corpus"). Reads the
+ * database's own properties directly rather than parsing bullet text, since this source
+ * is a real Notion database (unlike the legacy HVN_LEXICON_PAGE toggle-block page it
+ * replaces). The database is kept reconciled against the Text Reference by a separate,
+ * manual content-authoring pass — this function only ingests what's currently there.
+ */
 export async function getLexiconTerms(): Promise<LexiconTerm[]> {
-  const topBlocks = await listAllBlocks(HVN_LEXICON_PAGE);
-  const toggles = topBlocks.filter((b) => b.type === "toggle" && b.has_children);
+  const rows = await queryAllRows(NOTION_DS.lexicon);
 
-  const BATCH = 8;
   const terms: LexiconTerm[] = [];
-  for (let i = 0; i < toggles.length; i += BATCH) {
-    const slice = toggles.slice(i, i + BATCH);
-    const results = await Promise.all(
-      slice.map(async (toggle) => {
-        const nameRt = ((toggle.toggle as { rich_text?: RichTextToken[] })?.rich_text ?? []);
-        const name = joinRt(nameRt);
-        if (!name || SKIP_TERMS.has(name.toLowerCase())) return null;
-        const children = await listAllBlocks(toggle.id);
-        return {
-          id: toggle.id,
-          name,
-          category: categorize(name),
-          ...parseBullets(children),
-        } satisfies LexiconTerm;
-      }),
-    );
-    for (const t of results) if (t) terms.push(t);
+  for (const row of rows) {
+    const name = titleOf(row, "Name");
+    if (!name || SKIP_TERMS.has(name.toLowerCase())) continue;
+
+    terms.push({
+      id: row.id,
+      name,
+      category: categorize(name),
+      meaning: textOf(row, "Meaning"),
+      use: textOf(row, "Use"),
+      plainMeaning: textOf(row, "Plain Meaning"),
+      example: textOf(row, "Example"),
+      trainingSentences: splitEntries(textOf(row, "Training Sentences")),
+      professionalScenarios: splitTags(textOf(row, "Professional Scenarios")),
+      transitionPhrases: splitEntries(textOf(row, "Transition Phrases")),
+      revealGuidance: textOf(row, "Reveal Guidance") || null,
+      wordBankDistractors: splitTags(textOf(row, "Word Bank Distractors")),
+      trainingAudiences: multiSelectOf(row, "Training Audiences") as TrainingAudience[],
+      trainingDifficulty: numberOf(row, "Training Difficulty"),
+      corpusStatus: parseCorpusStatus(selectOf(row, "Corpus Status")),
+    });
   }
 
   return terms.sort((a, b) => a.name.localeCompare(b.name));
