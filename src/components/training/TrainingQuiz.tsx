@@ -30,12 +30,20 @@ interface TrueFalseQuestion {
 }
 type Question = ChoiceQuestion | TrueFalseQuestion;
 
-type Screen = "start" | "quiz" | "results";
+interface MatchPair {
+  term: string;
+  plain: string;
+  meaning: string;
+}
+
+type Screen = "start" | "quiz" | "match" | "results";
+type SessionMode = "match" | "quiz";
 
 // ─── Question generators ──────────────────────────────────────────────────────
 
 const rnd = () => Math.random() - 0.5;
 const lc = (s: string) => (s ? s.charAt(0).toLowerCase() + s.slice(1) : s);
+const MATCH_ROUND_SIZE = 6;
 
 function choiceFromTerm(term: LexiconEntry, terms: LexiconEntry[]): ChoiceQuestion {
   const mode: "a" | "b" = Math.random() > 0.5 ? "a" : "b";
@@ -101,6 +109,17 @@ function generateQuestions(terms: LexiconEntry[], count = 20, advanced = true): 
   return [...tf, ...choice].sort(rnd).slice(0, count);
 }
 
+function generateMatchPairs(terms: LexiconEntry[], count = MATCH_ROUND_SIZE): MatchPair[] {
+  return [...terms]
+    .sort(rnd)
+    .slice(0, Math.min(count, terms.length))
+    .map((term) => ({
+      term: term.term,
+      plain: term.plain,
+      meaning: term.meaning,
+    }));
+}
+
 // ─── Component ───────────────────────────────────────────────────────────────
 
 interface TrainingQuizProps {
@@ -112,15 +131,21 @@ export function TrainingQuiz({ terms: LEXICON_TERMS, categories: CATEGORIES }: T
   // Start screen state
   const [selectedCategories, setSelectedCategories] = useState<Set<string>>(new Set(CATEGORIES));
   const [founder, setFounder] = useState<"Founder 55" | "Founder 88">("Founder 55");
+  const [sessionMode, setSessionMode] = useState<SessionMode>("match");
   const [advanced, setAdvanced] = useState(true);
 
   // Quiz state
   const [screen, setScreen] = useState<Screen>("start");
   const [questions, setQuestions] = useState<Question[]>([]);
+  const [matchPairs, setMatchPairs] = useState<MatchPair[]>([]);
+  const [matchMeanings, setMatchMeanings] = useState<MatchPair[]>([]);
   const [currentIdx, setCurrentIdx] = useState(0);
   const [score, setScore] = useState(0);
   const [lives, setLives] = useState(3);
   const [selected, setSelected] = useState<string | null>(null);
+  const [selectedMatchTerm, setSelectedMatchTerm] = useState<string | null>(null);
+  const [matchedMeanings, setMatchedMeanings] = useState<Set<string>>(new Set());
+  const [matchFeedback, setMatchFeedback] = useState("");
   const [answered, setAnswered] = useState(false);
   const [xp, setXp] = useState(0);
   const [xpFlash, setXpFlash] = useState(false);
@@ -136,6 +161,7 @@ export function TrainingQuiz({ terms: LEXICON_TERMS, categories: CATEGORIES }: T
 
   const currentQuestion = questions[currentIdx];
   const totalQuestions = questions.length;
+  const resultTotal = sessionMode === "match" ? matchPairs.length : totalQuestions;
 
   // ── Toggle category ──────────────────────────────────────────────
   const toggleCategory = (cat: string) => {
@@ -154,18 +180,64 @@ export function TrainingQuiz({ terms: LEXICON_TERMS, categories: CATEGORIES }: T
   const beginSession = () => {
     const pool = LEXICON_TERMS.filter((t) => selectedCategories.has(t.category));
     if (pool.length < 2) return; // not enough terms
-    // Up to 20 questions per round, drawn randomly from the bank (the generator
-    // returns fewer only when the selected pool can't supply that many).
-    const qs = generateQuestions(pool, 20, advanced);
-    setQuestions(qs);
+    if (sessionMode === "match") {
+      const pairs = generateMatchPairs(pool);
+      setMatchPairs(pairs);
+      setMatchMeanings([...pairs].sort(rnd));
+      setMatchedMeanings(new Set());
+      setSelectedMatchTerm(null);
+      setMatchFeedback("");
+      setQuestions([]);
+    } else {
+      // Up to 20 questions per round, drawn randomly from the bank (the generator
+      // returns fewer only when the selected pool can't supply that many).
+      const qs = generateQuestions(pool, 20, advanced);
+      setQuestions(qs);
+      setMatchPairs([]);
+      setMatchMeanings([]);
+      setMatchedMeanings(new Set());
+      setSelectedMatchTerm(null);
+      setMatchFeedback("");
+    }
     setCurrentIdx(0);
     setScore(0);
     setLives(3);
     setXp(0);
     setSelected(null);
     setAnswered(false);
-    setScreen("quiz");
+    setScreen(sessionMode === "match" ? "match" : "quiz");
     setReportStatus("idle");
+  };
+
+  // ── Handle match answer ──────────────────────────────────────────
+  const handleMatch = (plain: string) => {
+    if (!selectedMatchTerm || matchedMeanings.has(plain)) return;
+    const pair = matchPairs.find((p) => p.term === selectedMatchTerm);
+    if (!pair) return;
+
+    if (pair.plain === plain) {
+      const nextMatched = new Set(matchedMeanings);
+      nextMatched.add(plain);
+      setMatchedMeanings(nextMatched);
+      setScore((s) => s + 1);
+      setXp((x) => x + 15);
+      setXpFlash(true);
+      setMatchFeedback(`${pair.term} matched.`);
+      setSelectedMatchTerm(null);
+      setTimeout(() => setXpFlash(false), 1200);
+      if (nextMatched.size >= matchPairs.length) {
+        setTimeout(() => setScreen("results"), 900);
+      }
+      return;
+    }
+
+    const newLives = lives - 1;
+    setLives(newLives);
+    setMatchFeedback(`Not quite. ${selectedMatchTerm} means ${pair.plain}.`);
+    setSelectedMatchTerm(null);
+    if (newLives === 0) {
+      setTimeout(() => setScreen("results"), 1200);
+    }
   };
 
   // ── Handle answer ────────────────────────────────────────────────
@@ -215,7 +287,8 @@ export function TrainingQuiz({ terms: LEXICON_TERMS, categories: CATEGORIES }: T
         body: JSON.stringify({
           founder,
           score,
-          total: totalQuestions,
+          total: resultTotal,
+          mode: sessionMode,
           categories: Array.from(selectedCategories),
           xp,
           timestamp: new Date().toISOString(),
@@ -330,6 +403,38 @@ export function TrainingQuiz({ terms: LEXICON_TERMS, categories: CATEGORIES }: T
 
             {/* Difficulty */}
             <div>
+              <h2 className="text-xs font-semibold uppercase tracking-wider text-muted mb-3">Training Mode</h2>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {[
+                  { key: "match", label: "Word Match", sub: "Pair each AMG term with its plain meaning." },
+                  { key: "quiz", label: "Question Round", sub: "Answer definitions, usage checks, and true/false." },
+                ].map((opt) => (
+                  <button
+                    key={opt.key}
+                    onClick={() => setSessionMode(opt.key as SessionMode)}
+                    className={[
+                      "rounded-xl border px-4 py-3 text-left transition-all",
+                      sessionMode === opt.key
+                        ? "border-gold/60 bg-gold/10"
+                        : "border-border bg-panel hover:border-gold/30",
+                    ].join(" ")}
+                  >
+                    <span
+                      className={[
+                        "block text-sm font-semibold",
+                        sessionMode === opt.key ? "text-gold" : "text-fg",
+                      ].join(" ")}
+                    >
+                      {opt.label}
+                    </span>
+                    <span className="block text-xs text-subtle">{opt.sub}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {sessionMode === "quiz" && (
+            <div>
               <h2 className="text-xs font-semibold uppercase tracking-wider text-muted mb-3">Difficulty</h2>
               <div className="flex gap-2">
                 {[
@@ -359,6 +464,7 @@ export function TrainingQuiz({ terms: LEXICON_TERMS, categories: CATEGORIES }: T
                 ))}
               </div>
             </div>
+            )}
 
             {/* Begin button */}
             <button
@@ -366,7 +472,7 @@ export function TrainingQuiz({ terms: LEXICON_TERMS, categories: CATEGORIES }: T
               disabled={LEXICON_TERMS.filter((t) => selectedCategories.has(t.category)).length < 2}
               className="w-full rounded-xl border border-gold/60 bg-gold/10 py-3 text-sm font-semibold text-gold hover:bg-gold/20 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
             >
-              Begin Session
+              {sessionMode === "match" ? "Begin Word Match" : "Begin Session"}
             </button>
 
             {/* Add a term panel */}
@@ -411,7 +517,7 @@ export function TrainingQuiz({ terms: LEXICON_TERMS, categories: CATEGORIES }: T
 
   // ── Render: Results screen ───────────────────────────────────────
   if (screen === "results") {
-    const pct = totalQuestions > 0 ? Math.round((score / totalQuestions) * 100) : 0;
+    const pct = resultTotal > 0 ? Math.round((score / resultTotal) * 100) : 0;
     const passed = lives > 0;
     return (
       <div className="flex flex-col gap-8 pt-2 max-w-6xl">
@@ -436,7 +542,7 @@ export function TrainingQuiz({ terms: LEXICON_TERMS, categories: CATEGORIES }: T
 
             <div className="rounded-2xl border border-border bg-panel p-6 flex flex-col gap-4">
               <div className="flex items-baseline gap-3">
-                <span className="text-5xl font-bold text-gold">{score}/{totalQuestions}</span>
+                <span className="text-5xl font-bold text-gold">{score}/{resultTotal}</span>
                 <span className="text-xl text-subtle">{pct}%</span>
               </div>
               <div className="flex items-center gap-2">
@@ -498,6 +604,127 @@ export function TrainingQuiz({ terms: LEXICON_TERMS, categories: CATEGORIES }: T
             ].join(" ")}
           >
             <ValeHost pose="quiz-welcome" className="w-full h-full" />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Render: Match screen ─────────────────────────────────────────
+  if (screen === "match") {
+    return (
+      <div className="flex flex-col gap-6 pt-2 max-w-6xl">
+        <div className="flex items-center gap-4">
+          <div className="flex-1 h-2 rounded-full bg-border">
+            <div
+              className="h-2 rounded-full bg-gold transition-all duration-300"
+              style={{ width: `${(matchedMeanings.size / Math.max(1, matchPairs.length)) * 100}%` }}
+            />
+          </div>
+          <div className="flex items-center gap-1">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <Heart
+                key={i}
+                size={18}
+                className={i < lives ? "text-gold fill-gold" : "text-border fill-border"}
+              />
+            ))}
+          </div>
+          <span className="text-xs text-muted whitespace-nowrap">
+            {matchedMeanings.size}/{matchPairs.length}
+          </span>
+        </div>
+
+        <div className="flex flex-col lg:flex-row gap-6 items-start">
+          <div className="lg:hidden self-center">
+            <ValeHost pose="stance" className="w-24 h-36" />
+          </div>
+
+          <div className="flex-1 max-w-3xl rounded-2xl border border-border bg-panel p-6 flex flex-col gap-5">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-muted mb-3">
+                Word Match
+              </p>
+              <h1 className="text-2xl font-bold text-gold">Match the AMG term to its plain meaning.</h1>
+              <p className="mt-2 text-sm text-subtle">
+                Select a term, then choose the matching meaning. Correct matches lock in and earn +15 XP.
+              </p>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="flex flex-col gap-2">
+                <p className="text-xs font-semibold uppercase tracking-wider text-muted">Terms</p>
+                {matchPairs.map((pair) => {
+                  const matched = matchedMeanings.has(pair.plain);
+                  const active = selectedMatchTerm === pair.term;
+                  return (
+                    <button
+                      key={pair.term}
+                      onClick={() => !matched && setSelectedMatchTerm(pair.term)}
+                      disabled={matched}
+                      className={[
+                        "rounded-xl border px-4 py-3 text-left text-sm transition-all",
+                        matched
+                          ? "border-gold/30 bg-gold/5 text-gold opacity-70"
+                          : active
+                          ? "border-gold bg-gold/10 text-gold"
+                          : "border-border bg-panel-2 text-fg hover:border-gold/40",
+                      ].join(" ")}
+                    >
+                      <span className="font-semibold">{pair.term}</span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <p className="text-xs font-semibold uppercase tracking-wider text-muted">Meanings</p>
+                {matchMeanings.map((pair) => {
+                  const matched = matchedMeanings.has(pair.plain);
+                  return (
+                    <button
+                      key={pair.plain}
+                      onClick={() => handleMatch(pair.plain)}
+                      disabled={matched || !selectedMatchTerm}
+                      className={[
+                        "rounded-xl border px-4 py-3 text-left text-sm transition-all",
+                        matched
+                          ? "border-gold/30 bg-gold/5 text-gold opacity-70"
+                          : selectedMatchTerm
+                          ? "border-border bg-panel-2 text-fg hover:border-gold/40"
+                          : "border-border bg-panel text-muted opacity-70",
+                      ].join(" ")}
+                    >
+                      {pair.plain}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {matchFeedback && (
+              <div
+                className={[
+                  "rounded-xl border px-4 py-3 text-sm leading-relaxed",
+                  matchFeedback.includes("matched")
+                    ? "border-gold/40 bg-gold/5 text-muted"
+                    : "border-border bg-panel-2 text-muted",
+                ].join(" ")}
+              >
+                <span className={matchFeedback.includes("matched") ? "font-semibold text-gold" : "font-semibold text-red-400"}>
+                  {matchFeedback.includes("matched") ? "Correct. " : "Review. "}
+                </span>
+                {matchFeedback}
+              </div>
+            )}
+
+            {xpFlash && (
+              <div className="text-center text-gold font-bold text-lg animate-bounce">+15 XP</div>
+            )}
+          </div>
+
+          <div className="hidden lg:block sticky top-6 w-[320px] xl:w-[400px] h-[70vh] shrink-0">
+            <ValeHost pose="stance" className="w-full h-full" priority />
           </div>
         </div>
       </div>
