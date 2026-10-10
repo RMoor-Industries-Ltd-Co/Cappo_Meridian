@@ -79,9 +79,31 @@ async function ensureSchema(p: Pool): Promise<void> {
           use_case      TEXT,
           plain_meaning TEXT,
           example       TEXT,
+          corpus_status TEXT,
+          training_sentences TEXT,
+          word_bank_distractors TEXT,
+          professional_scenarios TEXT,
+          reveal_guidance TEXT,
+          training_difficulty REAL,
+          training_audiences TEXT,
+          visual_asset_status TEXT,
+          visual_source TEXT,
+          source_reference TEXT,
+          has_visual BOOLEAN NOT NULL DEFAULT false,
           created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
           updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
         );
+        ALTER TABLE lexicon_terms ADD COLUMN IF NOT EXISTS corpus_status TEXT;
+        ALTER TABLE lexicon_terms ADD COLUMN IF NOT EXISTS training_sentences TEXT;
+        ALTER TABLE lexicon_terms ADD COLUMN IF NOT EXISTS word_bank_distractors TEXT;
+        ALTER TABLE lexicon_terms ADD COLUMN IF NOT EXISTS professional_scenarios TEXT;
+        ALTER TABLE lexicon_terms ADD COLUMN IF NOT EXISTS reveal_guidance TEXT;
+        ALTER TABLE lexicon_terms ADD COLUMN IF NOT EXISTS training_difficulty REAL;
+        ALTER TABLE lexicon_terms ADD COLUMN IF NOT EXISTS training_audiences TEXT;
+        ALTER TABLE lexicon_terms ADD COLUMN IF NOT EXISTS visual_asset_status TEXT;
+        ALTER TABLE lexicon_terms ADD COLUMN IF NOT EXISTS visual_source TEXT;
+        ALTER TABLE lexicon_terms ADD COLUMN IF NOT EXISTS source_reference TEXT;
+        ALTER TABLE lexicon_terms ADD COLUMN IF NOT EXISTS has_visual BOOLEAN NOT NULL DEFAULT false;
         CREATE TABLE IF NOT EXISTS lexicon_sync_runs (
           id            BIGSERIAL PRIMARY KEY,
           ran_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -365,13 +387,27 @@ export interface StoredLexiconTerm {
   use_case: string | null;
   plain_meaning: string | null;
   example: string | null;
+  corpus_status: string | null;
+  training_sentences: string | null;
+  word_bank_distractors: string | null;
+  professional_scenarios: string | null;
+  reveal_guidance: string | null;
+  training_difficulty: number | null;
+  training_audiences: string | null;
+  visual_asset_status: string | null;
+  visual_source: string | null;
+  source_reference: string | null;
+  has_visual: boolean;
 }
 
 export async function listLexiconTerms(): Promise<StoredLexiconTerm[]> {
   const p = await db();
   if (!p) return [];
   const { rows } = await p.query<StoredLexiconTerm>(
-    `SELECT id, name, category, meaning, use_case, plain_meaning, example
+    `SELECT id, name, category, meaning, use_case, plain_meaning, example,
+            corpus_status, training_sentences, word_bank_distractors, professional_scenarios,
+            reveal_guidance, training_difficulty, training_audiences, visual_asset_status,
+            visual_source, source_reference, has_visual
        FROM lexicon_terms ORDER BY name ASC`,
   );
   return rows;
@@ -385,6 +421,17 @@ interface UpsertLexiconTermInput {
   use: string;
   plainMeaning: string;
   example: string;
+  corpusStatus: string;
+  trainingSentences: string;
+  wordBankDistractors: string;
+  professionalScenarios: string;
+  revealGuidance: string;
+  trainingDifficulty: number | null;
+  trainingAudiences: string;
+  visualAssetStatus: string;
+  visualSource: string;
+  sourceReference: string;
+  hasVisual: boolean;
 }
 
 /** Upsert each term by its Notion block id. Returns how many were newly inserted vs updated. */
@@ -397,14 +444,45 @@ export async function upsertLexiconTerms(
   let updated = 0;
   for (const t of terms) {
     const { rows } = await p.query<{ inserted: boolean }>(
-      `INSERT INTO lexicon_terms (id, name, category, meaning, use_case, plain_meaning, example, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, now())
+      `INSERT INTO lexicon_terms (
+         id, name, category, meaning, use_case, plain_meaning, example, corpus_status,
+         training_sentences, word_bank_distractors, professional_scenarios, reveal_guidance,
+         training_difficulty, training_audiences, visual_asset_status, visual_source,
+         source_reference, has_visual, updated_at
+       )
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, now())
        ON CONFLICT (id) DO UPDATE SET
          name = EXCLUDED.name, category = EXCLUDED.category, meaning = EXCLUDED.meaning,
          use_case = EXCLUDED.use_case, plain_meaning = EXCLUDED.plain_meaning, example = EXCLUDED.example,
+         corpus_status = EXCLUDED.corpus_status, training_sentences = EXCLUDED.training_sentences,
+         word_bank_distractors = EXCLUDED.word_bank_distractors,
+         professional_scenarios = EXCLUDED.professional_scenarios,
+         reveal_guidance = EXCLUDED.reveal_guidance, training_difficulty = EXCLUDED.training_difficulty,
+         training_audiences = EXCLUDED.training_audiences,
+         visual_asset_status = EXCLUDED.visual_asset_status, visual_source = EXCLUDED.visual_source,
+         source_reference = EXCLUDED.source_reference, has_visual = EXCLUDED.has_visual,
          updated_at = now()
        RETURNING (xmax = 0) AS inserted`,
-      [t.id, t.name, t.category, t.meaning, t.use, t.plainMeaning, t.example],
+      [
+        t.id,
+        t.name,
+        t.category,
+        t.meaning,
+        t.use,
+        t.plainMeaning,
+        t.example,
+        t.corpusStatus,
+        t.trainingSentences,
+        t.wordBankDistractors,
+        t.professionalScenarios,
+        t.revealGuidance,
+        t.trainingDifficulty,
+        t.trainingAudiences,
+        t.visualAssetStatus,
+        t.visualSource,
+        t.sourceReference,
+        t.hasVisual,
+      ],
     );
     if (rows[0]?.inserted) added += 1;
     else updated += 1;
