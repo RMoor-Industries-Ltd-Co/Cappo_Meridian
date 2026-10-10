@@ -10,6 +10,17 @@ export interface LexiconEntry {
   plain: string;
   example: string;
   formula?: string;
+  corpusStatus?: string;
+  trainingSentences?: string;
+  wordBankDistractors?: string;
+  professionalScenarios?: string;
+  revealGuidance?: string;
+  trainingDifficulty?: number | null;
+  trainingAudiences?: string;
+  visualAssetStatus?: string;
+  visualSource?: string;
+  sourceReference?: string;
+  hasVisual?: boolean;
   /** Proxy paths for this term's image gallery (see TERM_IMAGES). */
   images?: string[];
   category: string;
@@ -21,6 +32,9 @@ const CATEGORY_RULES: [RegExp, string][] = [
   [/\banchor\b/i, "Prime Anchors"],
   [/reservoir|terrain basin/i, "Tempering Reservoirs"],
   [/ember line/i, "Ember Lines"],
+  [/quell|pare/i, "Ritual Instruments"],
+  [/calibration|calibrator/i, "Formation"],
+  [/appointment/i, "Curated Appointments"],
   [/cachet inset|deeprest|repose cushion|stem comb/i, "Product Formats"],
 ];
 
@@ -36,6 +50,14 @@ const RAW_TERMS: Omit<LexiconEntry, "category">[] = [
     use: "When referring to sourced or selected objects that support the HVN environment but are not proprietary HVN scent products.",
     plain: "Curated products or objects.",
     example: "The Havenry will include HVN originals and selected Appointments.",
+  },
+  {
+    term: "Bar Quell",
+    meaning: "HVN’s Quell designed to terminate the active burn of an Ember Line through controlled opposing contact.",
+    use: "Ritual Instrument used to arrest an Ember Line at the active ember without cutting the Line, preserving the unburned portion for subsequent use.",
+    plain: "The Quell used to extinguish an Ember Line.",
+    example: "The Keeper used the Bar to Quell the Ember Line before its natural burn was complete.",
+    corpusStatus: "Approved",
   },
   {
     term: "Atlas Chamber",
@@ -57,6 +79,22 @@ const RAW_TERMS: Omit<LexiconEntry, "category">[] = [
     use: "Core Impression / product format.",
     plain: "Scented wardrobe or storage inserts.",
     example: "Place the Cachet Inset inside the drawer and let the Note settle into the fabric.",
+  },
+  {
+    term: "Calibration",
+    meaning: "Office-specific Formation through which a Keeper develops familiarity with the responsibilities, Jurisdiction, Authority, and institutional standards applicable to an Office.",
+    use: "Connects a Keeper's Formation to the requirements of a particular Office, preparing the Keeper to exercise its responsibilities within established institutional boundaries. Calibration may accompany preparation for an Office not previously held. It does not itself establish Qualification, determine Capability, or confer Entrustment.",
+    plain: "Training specific to an Office and its responsibilities.",
+    example: "The Keeper underwent Calibration for the Office, developing familiarity with its responsibilities, Jurisdiction, and Authority.",
+    corpusStatus: "Approved",
+  },
+  {
+    term: "Calibrator",
+    meaning: "An HVN Global Office entrusted with developing institutional Formation materials and assessments, coordinating continuing and periodic Formation, the final evaluation of Keeper Capability, and advisory examination concerning the proper exercise of Entrustment.",
+    use: "Develops institutional Formation materials and assessments, coordinates continuing and periodic Formation for all Keepers, and makes final Capability determinations against established institutional standards. Examines, advises, interprets, and mediates to help other Offices exercise their Entrustment accurately, without assuming the responsibilities or Authority of those Offices. A Capability determination does not itself grant, Augment, Abate, or terminate Entrustment; those remain with the authority responsible for Entrustment. A Keeper entrusted with the Calibrator Office holds no other Office, preserving its independence.",
+    plain: "An institutional Office for Formation, Capability evaluation, and standards guidance.",
+    example: "Before the Keeper moved to the new Office, the Calibrator found the Keeper's demonstrated Capability sufficient for its responsibilities.",
+    corpusStatus: "Approved",
   },
   {
     term: "Channel Anchor",
@@ -113,6 +151,14 @@ const RAW_TERMS: Omit<LexiconEntry, "category">[] = [
     use: "Product format / rest object category.",
     plain: "Scented pillow or rest product.",
     example: "DeepRest carries the Note into the room's quietest hours.",
+  },
+  {
+    term: "Dew Quell",
+    meaning: "HVN’s Quell designed to extinguish an Atmos Chamber flame by immersing the burning Sere into its molten wax.",
+    use: "Ritual Instrument used to lower the burning Sere into the molten wax of an Atmos Chamber, extinguishing the flame through immersion before returning the Sere to position.",
+    plain: "The Quell that extinguishes an Atmos Chamber by immersing its Sere in molten wax.",
+    example: "The Charge used the Dew to Quell the flame before returning the Sere upright.",
+    corpusStatus: "Approved",
   },
   {
     term: "Elemental Sanctum",
@@ -178,6 +224,22 @@ const RAW_TERMS: Omit<LexiconEntry, "category">[] = [
     example: "The Object Reveal Atlas Chamber leaves something behind after the flame has done its work.",
   },
   {
+    term: "Pall Quell",
+    meaning: "HVN’s Quell designed to extinguish an Atmos Chamber flame by enclosing it and depriving it of the atmosphere required to sustain combustion.",
+    use: "Ritual Instrument placed over the flame of an Atmos Chamber to bring the flame to extinction through controlled enclosure.",
+    plain: "The Quell used to extinguish an Atmos Chamber by covering its flame.",
+    example: "The Charge lowered the Pall over the flame until the Atmos Chamber was Quelled.",
+    corpusStatus: "Approved",
+  },
+  {
+    term: "Pare",
+    meaning: "HVN’s Ritual Instrument designed to remove the spent portion of a Sere before subsequent use.",
+    use: "Ritual Instrument used to trim spent material from a Sere and restore its exposed length in preparation for the next burn.",
+    plain: "The Ritual Instrument used to trim a Sere.",
+    example: "Before lighting the Atmos Chamber, the Charge used the Pare to remove the spent end of the Sere.",
+    corpusStatus: "Approved",
+  },
+  {
     term: "Obsidian Sanctum",
     meaning: "A darker, heavier Sanctum tier built around restraint, density, and private ritual.",
     use: "Sanctum tier.",
@@ -197,6 +259,22 @@ const RAW_TERMS: Omit<LexiconEntry, "category">[] = [
     use: "Sanctum tier.",
     plain: "Rare ceremonial ritual smoking object tier.",
     example: "Rare stone. Private smoke. No announcement.",
+  },
+  {
+    term: "Quell",
+    meaning: "An HVN Ritual Instrument designed to deliberately extinguish flame through a controlled method of extinction.",
+    use: "Refers to the family of Ritual Instruments whose principal function is the controlled extinction of flame. Individual Quells are distinguished by the method through which extinction is achieved.",
+    plain: "An HVN flame-extinguishing Ritual Instrument.",
+    example: "The Dew, Pall, and Bar are Quells designed for different methods of controlled flame extinction.",
+    corpusStatus: "Approved",
+  },
+  {
+    term: "Recalibration",
+    meaning: "A focused Formation process through which a previously qualified Keeper realigns with the responsibilities, Jurisdiction, and Authority of an Office to which the Keeper is returning.",
+    use: "Prepares a Keeper for return to a previously occupied Office by addressing changes in institutional standards or Office requirements, and the Keeper's familiarity with that Office's responsibilities, Jurisdiction, and Authority. Where Recalibration reveals a material concern regarding current Capability, a formal assessment may be required, and that assessment may identify a need for further Formation directed toward specific Capabilities. Returning to a previously occupied Office does not by itself invalidate an existing, applicable Qualification. Recalibration does not itself establish, reopen, or withdraw Qualification, constitute a Capability determination, or confer or restore Entrustment.",
+    plain: "Focused Formation for returning to a previously held Office.",
+    example: "Before returning to a previously held Office, the Keeper underwent Recalibration to account for changes in its Jurisdiction and responsibilities.",
+    corpusStatus: "Approved",
   },
   {
     term: "Repose Cushion",

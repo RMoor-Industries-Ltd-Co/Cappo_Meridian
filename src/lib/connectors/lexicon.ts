@@ -10,6 +10,17 @@ export interface LexiconTerm {
   use: string;
   plainMeaning: string;
   example: string;
+  corpusStatus: string;
+  trainingSentences: string;
+  wordBankDistractors: string;
+  professionalScenarios: string;
+  revealGuidance: string;
+  trainingDifficulty: number | null;
+  trainingAudiences: string;
+  visualAssetStatus: string;
+  visualSource: string;
+  sourceReference: string;
+  hasVisual: boolean;
 }
 
 type RichTextToken = { plain_text: string };
@@ -20,6 +31,9 @@ type NProp = {
   select?: { name: string } | null;
   status?: { name: string } | null;
   multi_select?: { name: string }[];
+  number?: number | null;
+  checkbox?: boolean;
+  url?: string | null;
 };
 type NRow = {
   id: string;
@@ -59,6 +73,9 @@ const CATEGORY_RULES: [RegExp, string][] = [
   [/\banchor\b/i, "Prime Anchors"],
   [/reservoir|terrain basin/i, "Tempering Reservoirs"],
   [/ember line/i, "Ember Lines"],
+  [/quell|pare/i, "Ritual Instruments"],
+  [/calibration|calibrator/i, "Formation"],
+  [/appointment/i, "Curated Appointments"],
   [/cachet inset|deeprest|repose cushion|stem comb|stem set|note hierarchy/i, "Product Formats"],
 ];
 
@@ -93,11 +110,24 @@ function textAny(row: NRow, names: string[]): string {
   if (prop.select?.name) return prop.select.name;
   if (prop.status?.name) return prop.status.name;
   if (prop.multi_select?.length) return prop.multi_select.map((v) => v.name).join(", ");
+  if (prop.url) return prop.url;
+  if (typeof prop.number === "number") return String(prop.number);
+  if (typeof prop.checkbox === "boolean") return prop.checkbox ? "true" : "false";
   return "";
 }
 
+function numberAny(row: NRow, names: string[]): number | null {
+  const prop = propByName(row, names);
+  return typeof prop?.number === "number" ? prop.number : null;
+}
+
+function checkboxAny(row: NRow, names: string[]): boolean {
+  const prop = propByName(row, names);
+  return prop?.checkbox === true;
+}
+
 function statusOf(row: NRow): string {
-  return textAny(row, ["status", "approval status", "term status"]).toLowerCase();
+  return textAny(row, ["corpus status", "status", "approval status", "term status"]).toLowerCase();
 }
 
 /** Fetch and parse all terms from the official HVN Lexicon Notion database. */
@@ -114,6 +144,17 @@ export async function getLexiconTerms(): Promise<LexiconTerm[]> {
       const use = textAny(row, ["use", "usage", "use case", "when to use"]);
       const plainMeaning = textAny(row, ["plain meaning", "plain", "plain english", "simple meaning"]);
       const example = textAny(row, ["example", "example sentence", "sample use"]);
+      const corpusStatus = textAny(row, ["corpus status", "status", "approval status", "term status"]);
+      const trainingSentences = textAny(row, ["training sentences", "training sentence", "quiz sentences"]);
+      const wordBankDistractors = textAny(row, ["word bank distractors", "distractors"]);
+      const professionalScenarios = textAny(row, ["professional scenarios", "scenarios"]);
+      const revealGuidance = textAny(row, ["reveal guidance"]);
+      const trainingDifficulty = numberAny(row, ["training difficulty", "difficulty"]);
+      const trainingAudiences = textAny(row, ["training audiences", "audiences"]);
+      const visualAssetStatus = textAny(row, ["visual asset status", "asset status"]);
+      const visualSource = textAny(row, ["visual source"]);
+      const sourceReference = textAny(row, ["source reference", "source"]);
+      const hasVisual = checkboxAny(row, ["has visual"]);
       return {
         id: row.id,
         name,
@@ -122,6 +163,17 @@ export async function getLexiconTerms(): Promise<LexiconTerm[]> {
         use,
         plainMeaning,
         example,
+        corpusStatus,
+        trainingSentences,
+        wordBankDistractors,
+        professionalScenarios,
+        revealGuidance,
+        trainingDifficulty,
+        trainingAudiences,
+        visualAssetStatus,
+        visualSource,
+        sourceReference,
+        hasVisual,
       } satisfies LexiconTerm;
     })
     .filter((term): term is LexiconTerm => Boolean(term))

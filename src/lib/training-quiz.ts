@@ -242,8 +242,21 @@ function shapeHint(term: string): string {
   return `${words} ${words === 1 ? "word" : "words"} · ${letters} letters`;
 }
 
+function trainingSentenceCandidates(term: LexiconEntry): string[] {
+  return (term.trainingSentences ?? "")
+    .split(/\n+|;\s+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
 /** The masked clue (and its label) for a term, or null when the entry has no text to build one from. */
 function blankClue(term: LexiconEntry): { label: string; prompt: string } | null {
+  for (const candidate of trainingSentenceCandidates(term)) {
+    const sentence = maskTerm(candidate, term.term);
+    if (sentence.masked) {
+      return { label: "Complete the training sentence — type the missing AMG term", prompt: sentence.text };
+    }
+  }
   const sentence = term.example ? maskTerm(term.example, term.term) : null;
   if (sentence?.masked) {
     return { label: "Complete the sentence — type the missing AMG term", prompt: sentence.text };
