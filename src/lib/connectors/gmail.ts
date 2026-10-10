@@ -165,16 +165,78 @@ export async function gmailTrash(ids: string[]): Promise<void> {
 }
 
 
+type InlineAttachment = {
+  filename: string;
+  contentType: string;
+  contentId: string;
+  data: Buffer;
+};
+
+type SendEmailOptions = {
+  text?: string;
+  html?: string;
+  inlineAttachments?: InlineAttachment[];
+};
+
+function encodeHeader(value: string): string {
+  return `=?UTF-8?B?${Buffer.from(value, "utf8").toString("base64")}?=`;
+}
+
 function buildRawMime(to: string, subject: string, body: string): string {
   const lines = [
     `To: ${to}`,
-    `Subject: ${subject}`,
+    `Subject: ${encodeHeader(subject)}`,
     `MIME-Version: 1.0`,
     `Content-Type: text/plain; charset="UTF-8"`,
     ``,
     body,
   ].join("\r\n");
   return Buffer.from(lines).toString("base64url");
+}
+
+function buildHtmlRawMime(to: string, subject: string, options: SendEmailOptions): string {
+  const relatedBoundary = `amg_related_${Date.now()}`;
+  const altBoundary = `amg_alt_${Date.now()}`;
+  const text = options.text ?? "";
+  const html = options.html ?? "";
+  const attachments = options.inlineAttachments ?? [];
+
+  const lines = [
+    `To: ${to}`,
+    `Subject: ${encodeHeader(subject)}`,
+    `MIME-Version: 1.0`,
+    `Content-Type: multipart/related; boundary="${relatedBoundary}"`,
+    ``,
+    `--${relatedBoundary}`,
+    `Content-Type: multipart/alternative; boundary="${altBoundary}"`,
+    ``,
+    `--${altBoundary}`,
+    `Content-Type: text/plain; charset="UTF-8"`,
+    `Content-Transfer-Encoding: base64`,
+    ``,
+    Buffer.from(text, "utf8").toString("base64"),
+    `--${altBoundary}`,
+    `Content-Type: text/html; charset="UTF-8"`,
+    `Content-Transfer-Encoding: base64`,
+    ``,
+    Buffer.from(html, "utf8").toString("base64"),
+    `--${altBoundary}--`,
+  ];
+
+  for (const attachment of attachments) {
+    lines.push(
+      `--${relatedBoundary}`,
+      `Content-Type: ${attachment.contentType}; name="${attachment.filename}"`,
+      `Content-Transfer-Encoding: base64`,
+      `Content-ID: <${attachment.contentId}>`,
+      `Content-Disposition: inline; filename="${attachment.filename}"`,
+      ``,
+      attachment.data.toString("base64"),
+    );
+  }
+
+  lines.push(`--${relatedBoundary}--`);
+  return Buffer.from(lines.join("\r\n")).toString("base64url");
 }
 
 /** Create a Gmail draft. Returns the draft id. */
@@ -196,6 +258,17 @@ export async function gmailSend(to: string, subject: string, body: string): Prom
   const { data } = await gmail.users.messages.send({
     userId: "me",
     requestBody: { raw: buildRawMime(to, subject, body) },
+  });
+  return data.id ?? "";
+}
+
+/** Send an HTML email with a plain-text fallback and optional inline images. */
+export async function gmailSendHtml(to: string, subject: string, options: SendEmailOptions): Promise<string> {
+  const gmail = await gmailClient();
+  if (!gmail) throw new Error("Gmail not connected");
+  const { data } = await gmail.users.messages.send({
+    userId: "me",
+    requestBody: { raw: buildHtmlRawMime(to, subject, options) },
   });
   return data.id ?? "";
 }

@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
-import { Client } from "@notionhq/client";
 import { env } from "@/lib/env";
-import { HVN_LEXICON_PAGE } from "@/lib/notionSchema";
+import { createCapture } from "@/lib/connectors/notionWiki";
 
 const SYSTEM = `You are a brand language assistant for Apex Meridian Group (AMG) / HVN.
 Given a natural language description of a term, extract structured fields in JSON.
@@ -20,11 +19,6 @@ function getClaudeClient(): Anthropic {
   const key = env.ANTHROPIC_API_KEY || env.CLAUDE_API_KEY;
   if (!key) throw new Error("ANTHROPIC_API_KEY not configured");
   return new Anthropic({ apiKey: key });
-}
-
-function getNotionClient(): Client {
-  if (!env.NOTION_API_KEY) throw new Error("NOTION_API_KEY not configured");
-  return new Client({ auth: env.NOTION_API_KEY });
 }
 
 interface ExtractedTerm {
@@ -54,45 +48,24 @@ async function extractTerm(input: string): Promise<ExtractedTerm> {
   return JSON.parse(cleaned) as ExtractedTerm;
 }
 
-function richText(content: string) {
-  return [{ type: "text" as const, text: { content } }];
-}
-
-async function appendToLexiconPage(t: ExtractedTerm): Promise<void> {
-  const notion = getNotionClient();
-
-  await notion.blocks.children.append({
-    block_id: HVN_LEXICON_PAGE,
-    children: [
-      {
-        type: "toggle",
-        toggle: {
-          rich_text: richText(t.term),
-          children: [
-            {
-              type: "bulleted_list_item",
-              bulleted_list_item: { rich_text: richText(`Meaning: ${t.meaning}`) },
-            },
-            {
-              type: "bulleted_list_item",
-              bulleted_list_item: { rich_text: richText(`Use: ${t.use}`) },
-            },
-            {
-              type: "bulleted_list_item",
-              bulleted_list_item: { rich_text: richText(`Plain meaning: ${t.plain}`) },
-            },
-            {
-              type: "bulleted_list_item",
-              bulleted_list_item: { rich_text: richText("Example:") },
-            },
-            {
-              type: "bulleted_list_item",
-              bulleted_list_item: { rich_text: richText(t.example) },
-            },
-          ],
-        },
-      },
-    ],
+async function createLexiconProposal(t: ExtractedTerm, rawInput: string): Promise<void> {
+  await createCapture({
+    title: `Lexicon proposal: ${t.term}`,
+    type: "Terminology",
+    notes: [
+      "Governance note: this is a CAPPO Quiz suggestion, not an approved lexicon term.",
+      "Route through AMGPx lexicon review before adding to the Lexicon Official Database.",
+      "",
+      `Proposed term: ${t.term}`,
+      `Category: ${t.category}`,
+      `Meaning: ${t.meaning}`,
+      `Use: ${t.use}`,
+      `Plain meaning: ${t.plain}`,
+      `Example: ${t.example}`,
+      "",
+      "Original learner input:",
+      rawInput,
+    ].join("\n"),
   });
 }
 
@@ -105,9 +78,9 @@ export async function POST(req: NextRequest) {
     }
 
     const extracted = await extractTerm(input);
-    await appendToLexiconPage(extracted);
+    await createLexiconProposal(extracted, input);
 
-    return NextResponse.json({ ok: true, term: extracted.term });
+    return NextResponse.json({ ok: true, term: extracted.term, status: "queued_for_review" });
   } catch (err) {
     const error = err instanceof Error ? err.message : String(err);
     return NextResponse.json({ ok: false, error });

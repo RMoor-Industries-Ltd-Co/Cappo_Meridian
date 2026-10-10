@@ -1,0 +1,12 @@
+packages:
+  - .
+
+overrides:
+  google-auth-library: 10.7.0
+  postcss: ^8.5.10
+
+onlyBuiltDependencies:
+  - unrs-resolver
+
+allowBuilds:
+  unrs-resolver: set this to true or false

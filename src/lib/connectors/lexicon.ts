@@ -1,6 +1,6 @@
 import { Client } from "@notionhq/client";
 import { env } from "@/lib/env";
-import { HVN_LEXICON_PAGE } from "@/lib/notionSchema";
+import { HVN_LEXICON_OFFICIAL_DS } from "@/lib/notionSchema";
 
 export interface LexiconTerm {
   id: string;
@@ -12,14 +12,19 @@ export interface LexiconTerm {
   example: string;
 }
 
-type AnyBlock = {
-  id: string;
-  type: string;
-  has_children?: boolean;
-  [key: string]: unknown;
-};
-
 type RichTextToken = { plain_text: string };
+type NProp = {
+  type?: string;
+  title?: RichTextToken[];
+  rich_text?: RichTextToken[];
+  select?: { name: string } | null;
+  status?: { name: string } | null;
+  multi_select?: { name: string }[];
+};
+type NRow = {
+  id: string;
+  properties: Record<string, NProp>;
+};
 
 let client: Client | null = null;
 function getClient(): Client {
@@ -28,45 +33,25 @@ function getClient(): Client {
   return client;
 }
 
-/** Fetch all blocks from a page, handling Notion cursor pagination. */
-async function listAllBlocks(blockId: string): Promise<AnyBlock[]> {
-  const results: AnyBlock[] = [];
+type QueryArgs = Parameters<Client["dataSources"]["query"]>[0];
+
+/** Fetch all rows from a data source, handling Notion cursor pagination. */
+async function listAllRows(dataSourceId: string): Promise<NRow[]> {
+  const results: NRow[] = [];
   let cursor: string | undefined;
   do {
-    const res = await getClient().blocks.children.list({
-      block_id: blockId,
+    const res = await getClient().dataSources.query({
+      data_source_id: dataSourceId,
       page_size: 100,
       ...(cursor ? { start_cursor: cursor } : {}),
-    });
-    results.push(...(res.results as unknown as AnyBlock[]));
+    } as QueryArgs);
+    results.push(...(res.results as unknown as NRow[]));
     cursor = res.next_cursor ?? undefined;
   } while (cursor);
   return results;
 }
 
 const joinRt = (rt: RichTextToken[]) => rt.map((t) => t.plain_text).join("").trim();
-
-/** Parse the bullet items inside a toggle block into term fields. */
-function parseBullets(bullets: AnyBlock[]): {
-  meaning: string;
-  use: string;
-  plainMeaning: string;
-  example: string;
-} {
-  let meaning = "", use = "", plainMeaning = "", example = "";
-  let awaitExample = false;
-  for (const b of bullets) {
-    if (b.type !== "bulleted_list_item") continue;
-    const rt = ((b.bulleted_list_item as { rich_text?: RichTextToken[] })?.rich_text ?? []);
-    const text = joinRt(rt);
-    if (/^meaning:/i.test(text)) meaning = text.replace(/^meaning:\s*/i, "");
-    else if (/^use:/i.test(text)) use = text.replace(/^use:\s*/i, "");
-    else if (/^plain meaning:/i.test(text)) plainMeaning = text.replace(/^plain meaning:\s*/i, "");
-    else if (/^example:?$/i.test(text)) awaitExample = true;
-    else if (awaitExample && text) { example = text.replace(/^`|`$/g, "").trim(); awaitExample = false; }
-  }
-  return { meaning, use, plainMeaning, example };
-}
 
 const CATEGORY_RULES: [RegExp, string][] = [
   [/sanctum/i, "Sanctum"],
@@ -84,31 +69,61 @@ function categorize(name: string): string {
 
 const SKIP_TERMS = new Set(["current note hierarchy"]);
 
-/** Fetch and parse all terms from the HVN Lexicon Notion page. */
-export async function getLexiconTerms(): Promise<LexiconTerm[]> {
-  const topBlocks = await listAllBlocks(HVN_LEXICON_PAGE);
-  const toggles = topBlocks.filter((b) => b.type === "toggle" && b.has_children);
-
-  const BATCH = 8;
-  const terms: LexiconTerm[] = [];
-  for (let i = 0; i < toggles.length; i += BATCH) {
-    const slice = toggles.slice(i, i + BATCH);
-    const results = await Promise.all(
-      slice.map(async (toggle) => {
-        const nameRt = ((toggle.toggle as { rich_text?: RichTextToken[] })?.rich_text ?? []);
-        const name = joinRt(nameRt);
-        if (!name || SKIP_TERMS.has(name.toLowerCase())) return null;
-        const children = await listAllBlocks(toggle.id);
-        return {
-          id: toggle.id,
-          name,
-          category: categorize(name),
-          ...parseBullets(children),
-        } satisfies LexiconTerm;
-      }),
-    );
-    for (const t of results) if (t) terms.push(t);
+function propByName(row: NRow, names: string[]): NProp | undefined {
+  const wanted = new Set(names.map((n) => n.toLowerCase()));
+  for (const [key, value] of Object.entries(row.properties)) {
+    const normalized = key.toLowerCase().replace(/[_-]/g, " ").trim();
+    if (wanted.has(normalized)) return value;
   }
+  return undefined;
+}
 
-  return terms.sort((a, b) => a.name.localeCompare(b.name));
+function titleAny(row: NRow, names: string[]): string {
+  const named = propByName(row, names);
+  if (named?.title) return joinRt(named.title);
+  const firstTitle = Object.values(row.properties).find((p) => p.type === "title" && p.title);
+  return firstTitle?.title ? joinRt(firstTitle.title) : "";
+}
+
+function textAny(row: NRow, names: string[]): string {
+  const prop = propByName(row, names);
+  if (!prop) return "";
+  if (prop.rich_text) return joinRt(prop.rich_text);
+  if (prop.title) return joinRt(prop.title);
+  if (prop.select?.name) return prop.select.name;
+  if (prop.status?.name) return prop.status.name;
+  if (prop.multi_select?.length) return prop.multi_select.map((v) => v.name).join(", ");
+  return "";
+}
+
+function statusOf(row: NRow): string {
+  return textAny(row, ["status", "approval status", "term status"]).toLowerCase();
+}
+
+/** Fetch and parse all terms from the official HVN Lexicon Notion database. */
+export async function getLexiconTerms(): Promise<LexiconTerm[]> {
+  const rows = await listAllRows(HVN_LEXICON_OFFICIAL_DS);
+  return rows
+    .map((row) => {
+      const name = titleAny(row, ["name", "term", "lexicon term"]).trim();
+      if (!name || SKIP_TERMS.has(name.toLowerCase())) return null;
+      const status = statusOf(row);
+      if (status.includes("superseded") || status.includes("rejected")) return null;
+      const category = textAny(row, ["category", "type", "domain"]) || categorize(name);
+      const meaning = textAny(row, ["meaning", "definition", "formal definition", "description"]);
+      const use = textAny(row, ["use", "usage", "use case", "when to use"]);
+      const plainMeaning = textAny(row, ["plain meaning", "plain", "plain english", "simple meaning"]);
+      const example = textAny(row, ["example", "example sentence", "sample use"]);
+      return {
+        id: row.id,
+        name,
+        category,
+        meaning,
+        use,
+        plainMeaning,
+        example,
+      } satisfies LexiconTerm;
+    })
+    .filter((term): term is LexiconTerm => Boolean(term))
+    .sort((a, b) => a.name.localeCompare(b.name));
 }
