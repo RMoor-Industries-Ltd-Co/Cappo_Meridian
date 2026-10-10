@@ -102,6 +102,12 @@ table (keyed by Notion block id); the Lexicon page and Training quiz read from t
 table (falling back to the static list in `lib/lexicon-data.ts` if the DB is empty or
 unconfigured, e.g. local dev).
 
+The sync reads the **Lexicon Official Database** schema, including `Corpus Status`
+and the expanded training metadata (`Training Sentences`, `Word Bank Distractors`,
+`Professional Scenarios`, `Reveal Guidance`, training audience/difficulty, source,
+and visual status). Fill in the Blank prefers governed `Training Sentences` when
+present, then falls back to `Example` and definition text.
+
 - **Daily automatic sync**: `lib/lexiconScheduler.ts`, started once per server
   instance from `instrumentation.ts`. This is a single-container deploy with no
   separate worker — it's an in-process check every hour that only actually syncs
