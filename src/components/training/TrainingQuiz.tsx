@@ -3,128 +3,35 @@
 import { useState, useCallback } from "react";
 import { Heart, CheckCircle } from "lucide-react";
 import type { LexiconEntry } from "@/lib/lexicon-data";
-import { USAGE_TF } from "@/lib/quiz-usage";
+import {
+  BLANK_ROUND_SIZE,
+  MASTER_PASS_PERCENT,
+  MASTER_ROUND_SIZE,
+  MODES,
+  MODE_ORDER,
+  QUIZ_ROUND_SIZE,
+  XP,
+  evaluateResult,
+  generateBlankQuestions,
+  generateMasterQuestions,
+  generateMatchPairs,
+  generateQuestions,
+  gradeBlank,
+  questionTerms,
+  questionTier,
+  rnd,
+  type BlankGrade,
+  type MatchPair,
+  type Question,
+  type SessionMode,
+} from "@/lib/training-quiz";
+import { MatchBlock } from "./MatchBlock";
 import { ValeHost } from "./ValeHost";
 
-// ─── Types ───────────────────────────────────────────────────────────────────
-
-/**
- * Two question kinds today; the discriminated union leaves room for the planned
- * fill-in-the-blank and sample-conversation kinds. Every question carries an
- * `explanation` shown after answering (the teaching moment), and `correct` is a
- * plain string in both so the answer handler stays kind-agnostic.
- */
-interface ChoiceQuestion {
-  kind: "choice";
-  term: string;
-  promptLabel: string;
-  prompt: string;
-  correct: string;
-  options: string[];
-  explanation: string;
-}
-interface TrueFalseQuestion {
-  kind: "tf";
-  terms: string[];
-  statement: string;
-  correct: "True" | "False";
-  explanation: string;
-}
-type Question = ChoiceQuestion | TrueFalseQuestion;
-
-interface MatchPair {
-  term: string;
-  plain: string;
-  meaning: string;
-}
+// Question types, generators and the blank grader live in `@/lib/training-quiz`;
+// this file is the UI + session state around them.
 
 type Screen = "start" | "quiz" | "match" | "results";
-type SessionMode = "match" | "quiz";
-
-// ─── Question generators ──────────────────────────────────────────────────────
-
-const rnd = () => Math.random() - 0.5;
-const lc = (s: string) => (s ? s.charAt(0).toLowerCase() + s.slice(1) : s);
-const MATCH_ROUND_SIZE = 6;
-
-function choiceFromTerm(term: LexiconEntry, terms: LexiconEntry[]): ChoiceQuestion {
-  const mode: "a" | "b" = Math.random() > 0.5 ? "a" : "b";
-  const correct = mode === "a" ? term.plain : term.term;
-  const wrong = terms
-    .filter((t) => t.term !== term.term)
-    .sort(rnd)
-    .slice(0, 3)
-    .map((t) => (mode === "a" ? t.plain : t.term));
-  const options = [...wrong, correct].sort(rnd);
-  return {
-    kind: "choice",
-    term: term.term,
-    promptLabel: mode === "a" ? "What does this term mean?" : "Name this term",
-    prompt: mode === "a" ? term.term : term.plain,
-    correct,
-    options,
-    explanation: `${term.term} — ${term.meaning}${term.use ? ` (${term.use})` : ""}`,
-  };
-}
-
-/** Auto true/false: a term paired with its own meaning (true) or another's (false). */
-function meaningTF(term: LexiconEntry, terms: LexiconEntry[]): TrueFalseQuestion {
-  if (Math.random() > 0.5) {
-    return {
-      kind: "tf",
-      terms: [term.term],
-      statement: `Is it true that “${term.term}” means ${lc(term.plain)}?`,
-      correct: "True",
-      explanation: `Correct — ${term.term} means ${lc(term.plain)}. ${term.meaning}`,
-    };
-  }
-  const other =
-    terms.filter((t) => t.term !== term.term && t.plain !== term.plain).sort(rnd)[0] ?? term;
-  return {
-    kind: "tf",
-    terms: [term.term, other.term],
-    statement: `Is it true that “${term.term}” means ${lc(other.plain)}?`,
-    correct: "False",
-    explanation: `Not quite — that describes ${other.term}. ${term.term} means ${lc(term.plain)}: ${term.meaning}`,
-  };
-}
-
-function generateQuestions(terms: LexiconEntry[], count = 20, advanced = true): Question[] {
-  const choiceQs = [...terms].sort(rnd).map((t) => choiceFromTerm(t, terms));
-  if (!advanced) return choiceQs.slice(0, count);
-
-  const poolNames = new Set(terms.map((t) => t.term));
-  const curatedTF: TrueFalseQuestion[] = USAGE_TF.filter(
-    (q) => q.terms.length === 0 || q.terms.some((n) => poolNames.has(n)),
-  )
-    .sort(rnd)
-    .map((q) => ({
-      kind: "tf",
-      terms: q.terms,
-      statement: q.statement,
-      correct: q.answer,
-      explanation: q.explanation,
-    }));
-  const autoTF = [...terms].sort(rnd).map((t) => meaningTF(t, terms));
-
-  // Aim for roughly half true/false (curated usage first, then auto-generated),
-  // the rest multiple-choice, then shuffle the blend.
-  const tfTarget = Math.ceil(count / 2);
-  const tf = [...curatedTF, ...autoTF].slice(0, tfTarget);
-  const choice = choiceQs.slice(0, Math.max(0, count - tf.length));
-  return [...tf, ...choice].sort(rnd).slice(0, count);
-}
-
-function generateMatchPairs(terms: LexiconEntry[], count = MATCH_ROUND_SIZE): MatchPair[] {
-  return [...terms]
-    .sort(rnd)
-    .slice(0, Math.min(count, terms.length))
-    .map((term) => ({
-      term: term.term,
-      plain: term.plain,
-      meaning: term.meaning,
-    }));
-}
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
@@ -138,6 +45,7 @@ export function TrainingQuiz({ terms: LEXICON_TERMS, categories: CATEGORIES }: T
   const [selectedCategories, setSelectedCategories] = useState<Set<string>>(new Set(CATEGORIES));
   const [founder, setFounder] = useState<"Founder 55" | "Founder 88">("Founder 55");
   const [sessionMode, setSessionMode] = useState<SessionMode>("match");
+  const [startNote, setStartNote] = useState("");
   const [advanced, setAdvanced] = useState(true);
 
   // Quiz state
@@ -154,8 +62,12 @@ export function TrainingQuiz({ terms: LEXICON_TERMS, categories: CATEGORIES }: T
   const [matchFeedback, setMatchFeedback] = useState("");
   const [missedTerms, setMissedTerms] = useState<string[]>([]);
   const [answered, setAnswered] = useState(false);
+  const [lastCorrect, setLastCorrect] = useState(false);
+  const [typed, setTyped] = useState("");
+  const [blankGrade, setBlankGrade] = useState<BlankGrade | "skipped" | null>(null);
   const [xp, setXp] = useState(0);
   const [xpFlash, setXpFlash] = useState(false);
+  const [xpGain, setXpGain] = useState<number>(XP.choice);
 
   // Add term state
   const [addTermInput, setAddTermInput] = useState("");
@@ -169,6 +81,9 @@ export function TrainingQuiz({ terms: LEXICON_TERMS, categories: CATEGORIES }: T
   const currentQuestion = questions[currentIdx];
   const totalQuestions = questions.length;
   const resultTotal = sessionMode === "match" ? matchPairs.length : totalQuestions;
+  const modeMeta = MODES[sessionMode];
+  const maxLives = modeMeta.lives;
+  const result = evaluateResult({ mode: sessionMode, score, total: resultTotal, lives });
 
   // ── Toggle category ──────────────────────────────────────────────
   const toggleCategory = (cat: string) => {
@@ -187,6 +102,7 @@ export function TrainingQuiz({ terms: LEXICON_TERMS, categories: CATEGORIES }: T
   const beginSession = () => {
     const pool = LEXICON_TERMS.filter((t) => selectedCategories.has(t.category));
     if (pool.length < 2) return; // not enough terms
+    setStartNote("");
     if (sessionMode === "match") {
       const pairs = generateMatchPairs(pool);
       setMatchPairs(pairs);
@@ -197,9 +113,20 @@ export function TrainingQuiz({ terms: LEXICON_TERMS, categories: CATEGORIES }: T
       setMissedTerms([]);
       setQuestions([]);
     } else {
-      // Up to 20 questions per round, drawn randomly from the bank (the generator
-      // returns fewer only when the selected pool can't supply that many).
-      const qs = generateQuestions(pool, 20, advanced);
+      // Rounds are drawn randomly from the selected terms (each generator returns fewer
+      // only when the pool can't supply that many).
+      const qs =
+        sessionMode === "blank"
+          ? generateBlankQuestions(pool, BLANK_ROUND_SIZE)
+          : sessionMode === "master"
+          ? generateMasterQuestions(pool, MASTER_ROUND_SIZE)
+          : generateQuestions(pool, QUIZ_ROUND_SIZE, advanced);
+      if (qs.length === 0) {
+        setStartNote(
+          "These categories don't have enough definition text to build this mode yet. Pick more categories or another mode.",
+        );
+        return;
+      }
       setQuestions(qs);
       setMatchPairs([]);
       setMatchMeanings([]);
@@ -210,10 +137,13 @@ export function TrainingQuiz({ terms: LEXICON_TERMS, categories: CATEGORIES }: T
     }
     setCurrentIdx(0);
     setScore(0);
-    setLives(3);
+    setLives(MODES[sessionMode].lives);
     setXp(0);
     setSelected(null);
     setAnswered(false);
+    setLastCorrect(false);
+    setTyped("");
+    setBlankGrade(null);
     setScreen(sessionMode === "match" ? "match" : "quiz");
     setReportStatus("idle");
   };
@@ -229,7 +159,8 @@ export function TrainingQuiz({ terms: LEXICON_TERMS, categories: CATEGORIES }: T
       nextMatched.add(plain);
       setMatchedMeanings(nextMatched);
       setScore((s) => s + 1);
-      setXp((x) => x + 15);
+      setXp((x) => x + XP.match);
+      setXpGain(XP.match);
       setXpFlash(true);
       setMatchFeedback(`${pair.term} matched.`);
       setSelectedMatchTerm(null);
@@ -250,34 +181,78 @@ export function TrainingQuiz({ terms: LEXICON_TERMS, categories: CATEGORIES }: T
     }
   };
 
-  // ── Handle answer ────────────────────────────────────────────────
+  // ── Answer bookkeeping shared by every question kind ─────────────
+  const creditCorrect = (gain: number) => {
+    setScore((n) => n + 1);
+    setXp((x) => x + gain);
+    setXpGain(gain);
+    setXpFlash(true);
+    setTimeout(() => setXpFlash(false), 1200);
+  };
+
+  /** Costs a heart and records the terms to review; out of hearts ends the session. */
+  const registerMiss = (names: string[]) => {
+    const newLives = lives - 1;
+    setLives(newLives);
+    setXpFlash(false);
+    setMissedTerms((terms) => [...terms, ...names]);
+    if (newLives === 0) {
+      // out of lives — go to results after delay
+      setTimeout(() => setScreen("results"), 1500);
+    }
+  };
+
+  // ── Handle choice / true-false answer ────────────────────────────
   const handleAnswer = useCallback(
     (option: string) => {
       if (answered || !currentQuestion) return;
+      if (currentQuestion.kind !== "choice" && currentQuestion.kind !== "tf") return;
       setSelected(option);
       setAnswered(true);
 
       if (option === currentQuestion.correct) {
-        setScore((s) => s + 1);
-        setXp((x) => x + 10);
-        setXpFlash(true);
-        setTimeout(() => setXpFlash(false), 1200);
+        setLastCorrect(true);
+        creditCorrect(currentQuestion.kind === "tf" ? XP.tf : XP.choice);
       } else {
-        const newLives = lives - 1;
-        setLives(newLives);
-        setMissedTerms((terms) => [
-          ...terms,
-          ...(currentQuestion.kind === "choice" ? [currentQuestion.term] : currentQuestion.terms),
-        ]);
-        if (newLives === 0) {
-          // out of lives — go to results after delay
-          setTimeout(() => setScreen("results"), 1500);
-          return;
-        }
+        setLastCorrect(false);
+        registerMiss(questionTerms(currentQuestion));
       }
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [answered, currentQuestion, lives],
   );
+
+  // ── Handle typed (fill in the blank) answer ──────────────────────
+  const handleBlankSubmit = (skip = false) => {
+    if (answered || !currentQuestion || currentQuestion.kind !== "blank") return;
+    if (!skip && !typed.trim()) return;
+    const grade: BlankGrade = skip ? "wrong" : gradeBlank(typed, currentQuestion.term, currentQuestion.alsoAccept);
+    setSelected(typed);
+    setAnswered(true);
+    setBlankGrade(skip ? "skipped" : grade);
+    if (grade === "wrong") {
+      setLastCorrect(false);
+      registerMiss(questionTerms(currentQuestion));
+    } else {
+      setLastCorrect(true);
+      creditCorrect(XP.blank);
+    }
+  };
+
+  // ── Master Quiz match block callbacks ────────────────────────────
+  const handleBlockPair = () => {
+    setXp((x) => x + XP.match);
+    setXpGain(XP.match);
+    setXpFlash(true);
+    setTimeout(() => setXpFlash(false), 1200);
+  };
+  const handleBlockMiss = (term: string) => registerMiss([term]);
+  const handleBlockComplete = (misses: number) => {
+    setAnswered(true);
+    setLastCorrect(misses === 0);
+    // The block counts as one question; it's credited when cleared without a wrong pick.
+    if (misses === 0) setScore((n) => n + 1);
+  };
 
   // ── Continue ─────────────────────────────────────────────────────
   const handleContinue = () => {
@@ -287,6 +262,10 @@ export function TrainingQuiz({ terms: LEXICON_TERMS, categories: CATEGORIES }: T
       setCurrentIdx((i) => i + 1);
       setSelected(null);
       setAnswered(false);
+      setXpFlash(false);
+      setLastCorrect(false);
+      setTyped("");
+      setBlankGrade(null);
     }
   };
 
@@ -306,6 +285,7 @@ export function TrainingQuiz({ terms: LEXICON_TERMS, categories: CATEGORIES }: T
           categories: Array.from(selectedCategories),
           xp,
           missedTerms: Array.from(new Set(missedTerms)),
+          passed: result.passed,
           timestamp: new Date().toISOString(),
         }),
       });
@@ -419,32 +399,61 @@ export function TrainingQuiz({ terms: LEXICON_TERMS, categories: CATEGORIES }: T
             {/* Difficulty */}
             <div>
               <h2 className="text-xs font-semibold uppercase tracking-wider text-muted mb-3">Training Mode</h2>
+
+              {/* Progression rail: recognition → recall → comprehension → mastery */}
+              <ol className="mb-3 grid grid-cols-4 gap-1.5" aria-label="Training progression">
+                {MODE_ORDER.map((key, i) => {
+                  const reached = i <= MODE_ORDER.indexOf(sessionMode);
+                  return (
+                    <li key={key}>
+                      <div className={["h-1 rounded-full", reached ? "bg-gold" : "bg-border"].join(" ")} />
+                      <span
+                        className={[
+                          "mt-1 block text-[10px] font-semibold uppercase tracking-wider",
+                          reached ? "text-gold" : "text-muted",
+                        ].join(" ")}
+                      >
+                        {i + 1} · {MODES[key].tier}
+                      </span>
+                    </li>
+                  );
+                })}
+              </ol>
+
               <div className="grid gap-2 sm:grid-cols-2">
-                {[
-                  { key: "match", label: "Word Match", sub: "Pair each AMG term with its plain meaning." },
-                  { key: "quiz", label: "Question Round", sub: "Answer definitions, usage checks, and true/false." },
-                ].map((opt) => (
-                  <button
-                    key={opt.key}
-                    onClick={() => setSessionMode(opt.key as SessionMode)}
-                    className={[
-                      "rounded-xl border px-4 py-3 text-left transition-all",
-                      sessionMode === opt.key
-                        ? "border-gold/60 bg-gold/10"
-                        : "border-border bg-panel hover:border-gold/30",
-                    ].join(" ")}
-                  >
-                    <span
+                {MODE_ORDER.map((key) => {
+                  const opt = MODES[key];
+                  const active = sessionMode === key;
+                  return (
+                    <button
+                      key={key}
+                      onClick={() => setSessionMode(key)}
                       className={[
-                        "block text-sm font-semibold",
-                        sessionMode === opt.key ? "text-gold" : "text-fg",
+                        "rounded-xl border px-4 py-3 text-left transition-all",
+                        active
+                          ? "border-gold/60 bg-gold/10"
+                          : key === "master"
+                          ? "border-gold/30 bg-panel hover:border-gold/50"
+                          : "border-border bg-panel hover:border-gold/30",
                       ].join(" ")}
                     >
-                      {opt.label}
-                    </span>
-                    <span className="block text-xs text-subtle">{opt.sub}</span>
-                  </button>
-                ))}
+                      <span className="flex items-center justify-between gap-2">
+                        <span className={["block text-sm font-semibold", active ? "text-gold" : "text-fg"].join(" ")}>
+                          {opt.label}
+                        </span>
+                        <span className="text-[10px] font-semibold uppercase tracking-wider text-gold/80">
+                          {key === "master" ? "Certification" : opt.tier}
+                        </span>
+                      </span>
+                      <span className="block text-xs text-subtle">{opt.sub}</span>
+                      {key === "master" && (
+                        <span className="mt-1 block text-[10px] uppercase tracking-wider text-muted">
+                          {MASTER_PASS_PERCENT}% to pass · {MODES.master.lives} hearts · {MASTER_ROUND_SIZE} questions
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
@@ -487,8 +496,9 @@ export function TrainingQuiz({ terms: LEXICON_TERMS, categories: CATEGORIES }: T
               disabled={LEXICON_TERMS.filter((t) => selectedCategories.has(t.category)).length < 2}
               className="w-full rounded-xl border border-gold/60 bg-gold/10 py-3 text-sm font-semibold text-gold hover:bg-gold/20 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
             >
-              {sessionMode === "match" ? "Begin Word Match" : "Begin Session"}
+              {modeMeta.beginLabel}
             </button>
+            {startNote && <p className="-mt-4 text-xs text-red-400">{startNote}</p>}
 
             {/* Add a term panel */}
             <div className="rounded-2xl border border-border bg-panel p-5">
@@ -532,8 +542,9 @@ export function TrainingQuiz({ terms: LEXICON_TERMS, categories: CATEGORIES }: T
 
   // ── Render: Results screen ───────────────────────────────────────
   if (screen === "results") {
-    const pct = resultTotal > 0 ? Math.round((score / resultTotal) * 100) : 0;
-    const passed = lives > 0;
+    const pct = result.percent;
+    const passed = result.passed;
+    const master = sessionMode === "master";
     return (
       <div className="flex flex-col gap-8 pt-2 max-w-6xl">
         <div className="flex flex-col lg:flex-row gap-8 items-start">
@@ -545,11 +556,24 @@ export function TrainingQuiz({ terms: LEXICON_TERMS, categories: CATEGORIES }: T
           {/* Left content column */}
           <div className="flex-1 max-w-2xl flex flex-col gap-8">
             <div>
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-gold/80">
+                {modeMeta.label} · {modeMeta.tier}
+              </p>
               <h1 className="text-3xl font-bold text-gold">
-                {passed ? "Vale Congratulates You" : "Session Complete"}
+                {master
+                  ? passed
+                    ? "Master Quiz Passed"
+                    : "Not Yet Certified"
+                  : passed
+                  ? "Vale Congratulates You"
+                  : "Session Complete"}
               </h1>
               <p className="mt-2 text-sm text-subtle">
-                {passed
+                {master
+                  ? passed
+                    ? `Mastery confirmed, ${founder} — you cleared the Master Quiz at ${pct}%.`
+                    : `${founder}, the Master Quiz requires ${MASTER_PASS_PERCENT}% with hearts remaining. Review the terms below and take another run.`
+                  : passed
                   ? `Well done, ${founder} — you've passed the Lexicon Training.`
                   : `Here's how you did, ${founder}.`}
               </p>
@@ -567,6 +591,11 @@ export function TrainingQuiz({ terms: LEXICON_TERMS, categories: CATEGORIES }: T
               {lives === 0 && (
                 <p className="text-sm text-red-400">Session ended early — all hearts lost.</p>
               )}
+              {master && lives > 0 && !passed && (
+                <p className="text-sm text-red-400">
+                  Score below the {MASTER_PASS_PERCENT}% mastery threshold.
+                </p>
+              )}
               {missedTerms.length > 0 && (
                 <p className="text-sm text-subtle">
                   Review next: {Array.from(new Set(missedTerms)).join(", ")}
@@ -575,7 +604,7 @@ export function TrainingQuiz({ terms: LEXICON_TERMS, categories: CATEGORIES }: T
             </div>
 
             <div className="flex flex-col gap-3">
-              {passed && (
+              {(passed || master) && (
                 <p className="text-xs text-subtle">
                   Next step: email your results to complete the record.
                 </p>
@@ -642,7 +671,7 @@ export function TrainingQuiz({ terms: LEXICON_TERMS, categories: CATEGORIES }: T
             />
           </div>
           <div className="flex items-center gap-1">
-            {Array.from({ length: 3 }).map((_, i) => (
+            {Array.from({ length: maxLives }).map((_, i) => (
               <Heart
                 key={i}
                 size={18}
@@ -739,7 +768,7 @@ export function TrainingQuiz({ terms: LEXICON_TERMS, categories: CATEGORIES }: T
             )}
 
             {xpFlash && (
-              <div className="text-center text-gold font-bold text-lg animate-bounce">+15 XP</div>
+              <div className="text-center text-gold font-bold text-lg animate-bounce">+{xpGain} XP</div>
             )}
           </div>
 
@@ -754,6 +783,23 @@ export function TrainingQuiz({ terms: LEXICON_TERMS, categories: CATEGORIES }: T
   // ── Render: Quiz screen ──────────────────────────────────────────
   if (!currentQuestion) return null;
 
+  const q = currentQuestion;
+  const promptLabel =
+    q.kind === "tf"
+      ? "True or false?"
+      : q.kind === "match"
+      ? "Match each term to its plain meaning"
+      : q.promptLabel;
+  const chip =
+    sessionMode === "master" ? `Master Quiz · ${questionTier(q)}` : `${modeMeta.label} · ${modeMeta.tier}`;
+  const promptText = q.kind === "tf" ? q.statement : q.kind === "match" ? null : q.prompt;
+  const feedbackLead =
+    q.kind === "blank" && blankGrade === "variant"
+      ? "Correct — accepted spelling. "
+      : lastCorrect
+      ? "Correct. "
+      : "Not quite. ";
+
   return (
     <div className="flex flex-col gap-6 pt-2 max-w-6xl">
       {/* Progress bar + lives */}
@@ -765,7 +811,7 @@ export function TrainingQuiz({ terms: LEXICON_TERMS, categories: CATEGORIES }: T
           />
         </div>
         <div className="flex items-center gap-1">
-          {Array.from({ length: 3 }).map((_, i) => (
+          {Array.from({ length: maxLives }).map((_, i) => (
             <Heart
               key={i}
               size={18}
@@ -786,79 +832,150 @@ export function TrainingQuiz({ terms: LEXICON_TERMS, categories: CATEGORIES }: T
         </div>
 
         {/* Card */}
-        <div className="flex-1 max-w-2xl rounded-2xl border border-border bg-panel p-6 flex flex-col gap-5">
+        <div className={["flex-1 rounded-2xl border border-border bg-panel p-6 flex flex-col gap-5", q.kind === "match" ? "max-w-3xl" : "max-w-2xl"].join(" ")}>
           {/* Prompt */}
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wider text-muted mb-3">
-              {currentQuestion.kind === "tf" ? "True or false?" : currentQuestion.promptLabel}
-            </p>
-            <p
-              className={[
-                "text-2xl font-bold leading-snug",
-                currentQuestion.kind === "choice" && currentQuestion.promptLabel === "What does this term mean?"
-                  ? "text-gold"
-                  : "text-fg",
-              ].join(" ")}
-            >
-              {currentQuestion.kind === "tf" ? currentQuestion.statement : currentQuestion.prompt}
-            </p>
+            <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-gold/80">{chip}</p>
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted mb-3">{promptLabel}</p>
+            {promptText !== null && (
+              <p
+                className={[
+                  "text-2xl font-bold leading-snug",
+                  q.kind === "choice" && q.promptLabel === "What does this term mean?"
+                    ? "text-gold"
+                    : "text-fg",
+                ].join(" ")}
+              >
+                {promptText}
+              </p>
+            )}
           </div>
 
-          {/* Answer options — choices for choice questions, True/False for tf */}
-          <div className={currentQuestion.kind === "tf" ? "flex gap-2" : "flex flex-col gap-2"}>
-            {(currentQuestion.kind === "tf" ? ["True", "False"] : currentQuestion.options).map((opt) => {
-              const isCorrect = opt === currentQuestion.correct;
-              const isSelected = opt === selected;
-              const wide = currentQuestion.kind === "tf" ? "flex-1 text-center font-semibold" : "text-left";
-              let optClass = `w-full rounded-xl border border-border bg-panel px-4 py-3 ${wide} text-sm text-fg hover:border-gold/40 hover:bg-panel-2 transition-all`;
-              if (answered) {
-                if (isCorrect) {
-                  optClass = `w-full rounded-xl border border-gold bg-gold/10 px-4 py-3 ${wide} text-sm text-gold transition-all`;
-                } else if (isSelected && !isCorrect) {
-                  optClass = `w-full rounded-xl border border-red-500/60 bg-red-500/10 px-4 py-3 ${wide} text-sm text-red-400 transition-all`;
-                } else {
-                  optClass = `w-full rounded-xl border border-border bg-panel px-4 py-3 ${wide} text-sm text-muted transition-all opacity-60`;
+          {/* Answer area — choices, True/False, a typed blank, or a match block */}
+          {(q.kind === "choice" || q.kind === "tf") && (
+            <div className={q.kind === "tf" ? "flex gap-2" : "flex flex-col gap-2"}>
+              {(q.kind === "tf" ? ["True", "False"] : q.options).map((opt) => {
+                const isCorrect = opt === q.correct;
+                const isSelected = opt === selected;
+                const wide = q.kind === "tf" ? "flex-1 text-center font-semibold" : "text-left";
+                let optClass = `w-full rounded-xl border border-border bg-panel px-4 py-3 ${wide} text-sm text-fg hover:border-gold/40 hover:bg-panel-2 transition-all`;
+                if (answered) {
+                  if (isCorrect) {
+                    optClass = `w-full rounded-xl border border-gold bg-gold/10 px-4 py-3 ${wide} text-sm text-gold transition-all`;
+                  } else if (isSelected && !isCorrect) {
+                    optClass = `w-full rounded-xl border border-red-500/60 bg-red-500/10 px-4 py-3 ${wide} text-sm text-red-400 transition-all`;
+                  } else {
+                    optClass = `w-full rounded-xl border border-border bg-panel px-4 py-3 ${wide} text-sm text-muted transition-all opacity-60`;
+                  }
                 }
-              }
-              return (
-                <button
-                  key={opt}
-                  onClick={() => handleAnswer(opt)}
-                  disabled={answered}
-                  className={optClass}
-                >
-                  {opt}
-                </button>
-              );
-            })}
-          </div>
+                return (
+                  <button
+                    key={opt}
+                    onClick={() => handleAnswer(opt)}
+                    disabled={answered}
+                    className={optClass}
+                  >
+                    {opt}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {q.kind === "blank" && (
+            <form
+              key={currentIdx}
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleBlankSubmit();
+              }}
+              className="flex flex-col gap-3"
+            >
+              <input
+                value={typed}
+                onChange={(e) => setTyped(e.target.value)}
+                disabled={answered}
+                autoFocus
+                autoComplete="off"
+                autoCapitalize="none"
+                spellCheck={false}
+                aria-label="Type the missing AMG term"
+                placeholder="Type the missing term…"
+                className={[
+                  "w-full rounded-xl border bg-background px-4 py-3 text-sm text-fg placeholder:text-muted focus:outline-none transition-colors",
+                  !answered
+                    ? "border-border focus:border-gold/60"
+                    : lastCorrect
+                    ? "border-gold"
+                    : "border-red-500/60",
+                ].join(" ")}
+              />
+              <p className="text-xs text-muted">Hint: {q.hint}</p>
+              {!answered && (
+                <div className="flex gap-2">
+                  <button
+                    type="submit"
+                    disabled={!typed.trim()}
+                    className="flex-1 rounded-xl border border-gold/60 bg-gold/10 py-3 text-sm font-semibold text-gold hover:bg-gold/20 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    Check Answer
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleBlankSubmit(true)}
+                    className="rounded-xl border border-border bg-panel px-4 py-3 text-sm font-medium text-subtle hover:border-gold/40 hover:text-fg transition-all"
+                  >
+                    I don&apos;t know
+                  </button>
+                </div>
+              )}
+            </form>
+          )}
+
+          {q.kind === "match" && (
+            <MatchBlock
+              key={currentIdx}
+              pairs={q.pairs}
+              locked={lives === 0 || answered}
+              onPairMatched={handleBlockPair}
+              onMiss={handleBlockMiss}
+              onComplete={handleBlockComplete}
+            />
+          )}
 
           {/* Explanation — the teaching moment, shown after answering */}
           {answered && (
             <div
               className={[
                 "rounded-xl border px-4 py-3 text-sm leading-relaxed",
-                selected === currentQuestion.correct
-                  ? "border-gold/40 bg-gold/5 text-muted"
-                  : "border-border bg-panel-2 text-muted",
+                lastCorrect ? "border-gold/40 bg-gold/5 text-muted" : "border-border bg-panel-2 text-muted",
               ].join(" ")}
             >
-              <span className={selected === currentQuestion.correct ? "font-semibold text-gold" : "font-semibold text-red-400"}>
-                {selected === currentQuestion.correct ? "Correct. " : "Not quite. "}
+              <span className={lastCorrect ? "font-semibold text-gold" : "font-semibold text-red-400"}>
+                {feedbackLead}
               </span>
-              {currentQuestion.explanation}
+              {q.kind === "blank" && (!lastCorrect || blankGrade === "variant") && (
+                <span className="font-semibold text-fg">The term is {q.term}. </span>
+              )}
+              {q.kind === "match" && (
+                <span>
+                  {lastCorrect ? "All pairs matched cleanly. " : "Matched, with misses along the way. "}
+                </span>
+              )}
+              {q.explanation}
             </div>
           )}
 
           {/* XP flash */}
           {xpFlash && (
-            <div className="text-center text-gold font-bold text-lg animate-bounce">+10 XP</div>
+            <div className="text-center text-gold font-bold text-lg animate-bounce">+{xpGain} XP</div>
           )}
 
           {/* Continue button */}
           {answered && (
             <button
               onClick={handleContinue}
+              autoFocus={q.kind === "blank"}
               className="w-full rounded-xl border border-gold/60 bg-gold/10 py-3 text-sm font-semibold text-gold hover:bg-gold/20 transition-all"
             >
               {currentIdx + 1 >= totalQuestions ? "See Results" : "Continue"}
