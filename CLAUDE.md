@@ -114,6 +114,25 @@ unconfigured, e.g. local dev).
   submissions *to* Notion (`/api/training/suggest`) — combined with this sync, a
   submitted term round-trips into the Lexicon view/quiz on the next daily pass.
 
+## Training quiz modes (`/training`)
+
+Four modes, in progression order — Word Match (recognition), Fill in the Blank (recall),
+Question Round (comprehension), Master Quiz (mastery/certification). Terms always come from the
+Official Lexicon Database copy passed in by `training/page.tsx` (`getLexiconEntries`); the quiz
+keeps no lexicon of its own, and *Add a Term* still files a proposal in Capture / Ideas.
+
+- `src/lib/training-quiz.ts` — pure engine: question types (`choice | tf | blank | match`),
+  generators, the fill-in-the-blank grader (`gradeBlank`: exact first, then spelling variants —
+  plural, missing "The", hyphens — plus any term whose masked clue is identical; the data model
+  has no alias field and none was added), mode metadata and the pass rule.
+- `src/components/training/TrainingQuiz.tsx` renders it; `MatchBlock.tsx` is the compact matching
+  round used inside the Master Quiz (standalone Word Match keeps its own screen).
+- Master Quiz: 30 questions (3 match blocks + blanks + multiple choice + true/false incl. curated
+  usage checks), 5 hearts, pass = hearts remaining **and** ≥80% (`MASTER_PASS_PERCENT`).
+- `src/lib/training-scorecard.ts` builds the report email (subject, plain-text fallback, branded
+  HTML) for every mode; `POST /api/training/score` only attaches the logo and sends via Gmail.
+  The Master Quiz is titled "Master Quiz Certification Attempt".
+
 ## Cappo executive report (pull-ready for ALLIE)
 
 `lib/cappoReportScheduler.ts`, started from `instrumentation.ts` alongside the lexicon sync —
