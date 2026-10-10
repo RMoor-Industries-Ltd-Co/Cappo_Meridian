@@ -15,10 +15,9 @@ export interface LexiconSyncResult {
 }
 
 /**
- * Pulls the current term list from the HVN Lexicon Notion page and upserts it into
- * Postgres (keyed by Notion block id), so edits made directly in Notion — the team's
- * source of truth — show up in the Cappo Lexicon view and Training quiz without
- * anyone touching this repo.
+ * Pulls the current term list from the Lexicon Official Database and upserts it into
+ * Postgres (keyed by Notion row id), so approved operational terminology shows up in
+ * the Cappo Lexicon view and Training quiz without anyone touching this repo.
  */
 export async function syncLexiconFromNotion(): Promise<LexiconSyncResult> {
   try {
@@ -44,7 +43,7 @@ export async function syncLexiconFromNotion(): Promise<LexiconSyncResult> {
 }
 
 /**
- * Terms for the Lexicon page and Training quiz — the Notion-synced Postgres copy
+ * Terms for the Lexicon page and Training quiz — the Official Database-synced Postgres copy
  * when there is one, falling back to the static bundled list (local dev without a
  * database, or before the first sync has ever run).
  */

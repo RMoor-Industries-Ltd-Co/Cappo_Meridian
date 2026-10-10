@@ -34,11 +34,5 @@
     "eslint-config-next": "16.2.7",
     "tailwindcss": "^4",
     "typescript": "^5"
-  },
-  "pnpm": {
-    "overrides": {
-      "google-auth-library": "10.7.0",
-      "postcss": "^8.5.10"
-    }
   }
 }

@@ -16,6 +16,7 @@ import { ValeHost } from "./ValeHost";
  */
 interface ChoiceQuestion {
   kind: "choice";
+  term: string;
   promptLabel: string;
   prompt: string;
   correct: string;
@@ -24,6 +25,7 @@ interface ChoiceQuestion {
 }
 interface TrueFalseQuestion {
   kind: "tf";
+  terms: string[];
   statement: string;
   correct: "True" | "False";
   explanation: string;
@@ -56,6 +58,7 @@ function choiceFromTerm(term: LexiconEntry, terms: LexiconEntry[]): ChoiceQuesti
   const options = [...wrong, correct].sort(rnd);
   return {
     kind: "choice",
+    term: term.term,
     promptLabel: mode === "a" ? "What does this term mean?" : "Name this term",
     prompt: mode === "a" ? term.term : term.plain,
     correct,
@@ -69,6 +72,7 @@ function meaningTF(term: LexiconEntry, terms: LexiconEntry[]): TrueFalseQuestion
   if (Math.random() > 0.5) {
     return {
       kind: "tf",
+      terms: [term.term],
       statement: `Is it true that “${term.term}” means ${lc(term.plain)}?`,
       correct: "True",
       explanation: `Correct — ${term.term} means ${lc(term.plain)}. ${term.meaning}`,
@@ -78,6 +82,7 @@ function meaningTF(term: LexiconEntry, terms: LexiconEntry[]): TrueFalseQuestion
     terms.filter((t) => t.term !== term.term && t.plain !== term.plain).sort(rnd)[0] ?? term;
   return {
     kind: "tf",
+    terms: [term.term, other.term],
     statement: `Is it true that “${term.term}” means ${lc(other.plain)}?`,
     correct: "False",
     explanation: `Not quite — that describes ${other.term}. ${term.term} means ${lc(term.plain)}: ${term.meaning}`,
@@ -95,6 +100,7 @@ function generateQuestions(terms: LexiconEntry[], count = 20, advanced = true): 
     .sort(rnd)
     .map((q) => ({
       kind: "tf",
+      terms: q.terms,
       statement: q.statement,
       correct: q.answer,
       explanation: q.explanation,
@@ -146,6 +152,7 @@ export function TrainingQuiz({ terms: LEXICON_TERMS, categories: CATEGORIES }: T
   const [selectedMatchTerm, setSelectedMatchTerm] = useState<string | null>(null);
   const [matchedMeanings, setMatchedMeanings] = useState<Set<string>>(new Set());
   const [matchFeedback, setMatchFeedback] = useState("");
+  const [missedTerms, setMissedTerms] = useState<string[]>([]);
   const [answered, setAnswered] = useState(false);
   const [xp, setXp] = useState(0);
   const [xpFlash, setXpFlash] = useState(false);
@@ -187,6 +194,7 @@ export function TrainingQuiz({ terms: LEXICON_TERMS, categories: CATEGORIES }: T
       setMatchedMeanings(new Set());
       setSelectedMatchTerm(null);
       setMatchFeedback("");
+      setMissedTerms([]);
       setQuestions([]);
     } else {
       // Up to 20 questions per round, drawn randomly from the bank (the generator
@@ -198,6 +206,7 @@ export function TrainingQuiz({ terms: LEXICON_TERMS, categories: CATEGORIES }: T
       setMatchedMeanings(new Set());
       setSelectedMatchTerm(null);
       setMatchFeedback("");
+      setMissedTerms([]);
     }
     setCurrentIdx(0);
     setScore(0);
@@ -233,6 +242,7 @@ export function TrainingQuiz({ terms: LEXICON_TERMS, categories: CATEGORIES }: T
 
     const newLives = lives - 1;
     setLives(newLives);
+    setMissedTerms((terms) => [...terms, pair.term]);
     setMatchFeedback(`Not quite. ${selectedMatchTerm} means ${pair.plain}.`);
     setSelectedMatchTerm(null);
     if (newLives === 0) {
@@ -255,6 +265,10 @@ export function TrainingQuiz({ terms: LEXICON_TERMS, categories: CATEGORIES }: T
       } else {
         const newLives = lives - 1;
         setLives(newLives);
+        setMissedTerms((terms) => [
+          ...terms,
+          ...(currentQuestion.kind === "choice" ? [currentQuestion.term] : currentQuestion.terms),
+        ]);
         if (newLives === 0) {
           // out of lives — go to results after delay
           setTimeout(() => setScreen("results"), 1500);
@@ -291,6 +305,7 @@ export function TrainingQuiz({ terms: LEXICON_TERMS, categories: CATEGORIES }: T
           mode: sessionMode,
           categories: Array.from(selectedCategories),
           xp,
+          missedTerms: Array.from(new Set(missedTerms)),
           timestamp: new Date().toISOString(),
         }),
       });
@@ -321,7 +336,7 @@ export function TrainingQuiz({ terms: LEXICON_TERMS, categories: CATEGORIES }: T
       const json = await res.json();
       if (json.ok) {
         setAddTermStatus("success");
-        setAddTermMessage(`"${json.term}" added to the Notion lexicon.`);
+        setAddTermMessage(`"${json.term}" queued for lexicon review.`);
         setAddTermInput("");
       } else {
         setAddTermStatus("error");
@@ -479,7 +494,7 @@ export function TrainingQuiz({ terms: LEXICON_TERMS, categories: CATEGORIES }: T
             <div className="rounded-2xl border border-border bg-panel p-5">
               <h2 className="text-sm font-semibold text-fg mb-1">Add a Term</h2>
               <p className="text-xs text-subtle mb-3">
-                Describe a new AMG term in plain language and we&apos;ll extract and add it to the Notion lexicon.
+                Describe a new AMG term in plain language. Cappo will queue it for lexicon review, not add it as approved terminology.
               </p>
               <textarea
                 value={addTermInput}
@@ -551,6 +566,11 @@ export function TrainingQuiz({ terms: LEXICON_TERMS, categories: CATEGORIES }: T
               </div>
               {lives === 0 && (
                 <p className="text-sm text-red-400">Session ended early — all hearts lost.</p>
+              )}
+              {missedTerms.length > 0 && (
+                <p className="text-sm text-subtle">
+                  Review next: {Array.from(new Set(missedTerms)).join(", ")}
+                </p>
               )}
             </div>
 

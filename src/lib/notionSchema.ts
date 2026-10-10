@@ -5,8 +5,19 @@
  */
 export const AMG_HUB_PAGE = "c433a327db39459ab7325913a8fc9b37";
 
-/** The HVN Lexicon page — single page of toggle blocks, one per term. */
+/**
+ * Legacy HVN Lexicon page — a single page of toggle blocks.
+ * Retained only for provenance; quiz/training should use the Official Database below.
+ */
 export const HVN_LEXICON_PAGE = "35ae4a150469806bacf3d520191e555d";
+
+/**
+ * Lexicon Official Database — canonical operational source for quiz/training.
+ * Recorded by AMGPx as page 3eae4a150469804fa16ef3d115ec9ed2 and collection/data source
+ * collection://3eae4a15-0469-80b1-b702-000b0b4160bb.
+ */
+export const HVN_LEXICON_OFFICIAL_PAGE = "3eae4a150469804fa16ef3d115ec9ed2";
+export const HVN_LEXICON_OFFICIAL_DS = "3eae4a15-0469-80b1-b702-000b0b4160bb";
 
 export const NOTION_DS = {
   bu: "f9142501-d297-4a98-85cc-abb18cbc6f68",
