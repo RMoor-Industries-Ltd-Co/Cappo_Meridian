@@ -490,6 +490,24 @@ export async function upsertLexiconTerms(
   return { added, updated };
 }
 
+/**
+ * Remove stored rows that merely duplicate an active term: their Notion row id is not in the
+ * current sync, but their name matches one that is. Rows with a unique name (e.g. legacy
+ * superseded entries kept for the record) are never touched. Returns how many were removed.
+ */
+export async function pruneRedundantLexiconTerms(activeIds: string[], activeNames: string[]): Promise<number> {
+  if (activeIds.length === 0) return 0;
+  const p = await db();
+  if (!p) throw new Error("Database not configured");
+  const { rowCount } = await p.query(
+    `DELETE FROM lexicon_terms
+      WHERE NOT (id = ANY($1::text[]))
+        AND lower(btrim(name)) = ANY($2::text[])`,
+    [activeIds, activeNames.map((n) => n.trim().toLowerCase())],
+  );
+  return rowCount ?? 0;
+}
+
 export async function logLexiconSync(result: {
   added: number;
   updated: number;

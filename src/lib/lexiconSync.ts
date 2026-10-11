@@ -1,5 +1,5 @@
 import { getLexiconTerms } from "@/lib/connectors/lexicon";
-import { upsertLexiconTerms, logLexiconSync, listLexiconTerms } from "@/lib/db";
+import { upsertLexiconTerms, pruneRedundantLexiconTerms, logLexiconSync, listLexiconTerms } from "@/lib/db";
 import {
   LEXICON_TERMS as STATIC_TERMS,
   CATEGORIES as STATIC_CATEGORIES,
@@ -43,6 +43,12 @@ export async function syncLexiconFromNotion(): Promise<LexiconSyncResult> {
         sourceReference: t.sourceReference,
         hasVisual: t.hasVisual,
       })),
+    );
+    // Notion marks a duplicate-name row Superseded and the sync then skips it, but its earlier
+    // upsert still sits in Postgres — drop those copies (only ones name-matching an active term).
+    await pruneRedundantLexiconTerms(
+      terms.map((t) => t.id),
+      terms.map((t) => t.name),
     );
     await logLexiconSync({ added, updated, total: terms.length });
     return { added, updated, total: terms.length };

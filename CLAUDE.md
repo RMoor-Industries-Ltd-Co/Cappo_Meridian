@@ -108,6 +108,10 @@ and the expanded training metadata (`Training Sentences`, `Word Bank Distractors
 and visual status). Fill in the Blank prefers governed `Training Sentences` when
 present, then falls back to `Example` and definition text.
 
+- **Superseded rows**: a Notion row with `Corpus Status = Superseded` is skipped by the sync.
+  Its earlier Postgres copy is removed (`pruneRedundantLexiconTerms`) only when its name matches
+  an active term — i.e. a redundant duplicate. A superseded row with a unique name (legacy
+  entries kept for the record) stays in Postgres untouched.
 - **Daily automatic sync**: `lib/lexiconScheduler.ts`, started once per server
   instance from `instrumentation.ts`. This is a single-container deploy with no
   separate worker — it's an in-process check every hour that only actually syncs
