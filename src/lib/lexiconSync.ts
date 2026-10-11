@@ -1,5 +1,5 @@
 import { getLexiconTerms } from "@/lib/connectors/lexicon";
-import { upsertLexiconTerms, logLexiconSync, listLexiconTerms } from "@/lib/db";
+import { upsertLexiconTerms, pruneRemovedLexiconTerms, logLexiconSync, listLexiconTerms } from "@/lib/db";
 import {
   LEXICON_TERMS as STATIC_TERMS,
   CATEGORIES as STATIC_CATEGORIES,
@@ -44,6 +44,9 @@ export async function syncLexiconFromNotion(): Promise<LexiconSyncResult> {
         hasVisual: t.hasVisual,
       })),
     );
+    // The Text Reference is the source of truth: a row Notion no longer lists as active (retired,
+    // superseded, split into separate terms) must not linger in the Postgres copy.
+    await pruneRemovedLexiconTerms(terms.map((t) => t.id));
     await logLexiconSync({ added, updated, total: terms.length });
     return { added, updated, total: terms.length };
   } catch (err) {
