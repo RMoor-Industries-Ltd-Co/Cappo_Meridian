@@ -491,20 +491,30 @@ export async function upsertLexiconTerms(
 }
 
 /**
- * Remove stored rows that merely duplicate an active term: their Notion row id is not in the
- * current sync, but their name matches one that is. Rows with a unique name (e.g. legacy
- * superseded entries kept for the record) are never touched. Returns how many were removed.
+ * Make the stored lexicon mirror the Official Database: delete every row whose Notion id is not
+ * in the current active set (retired, superseded, split or renamed-away entries). The Text
+ * Reference is the source of truth, so the copy must not retain terms it no longer lists.
+ *
+ * Guarded against a bad read: an empty active set is a no-op, and a prune that would remove more
+ * than a quarter of the stored rows is refused rather than run. Returns how many were removed.
  */
-export async function pruneRedundantLexiconTerms(activeIds: string[], activeNames: string[]): Promise<number> {
+export async function pruneRemovedLexiconTerms(activeIds: string[]): Promise<number> {
   if (activeIds.length === 0) return 0;
   const p = await db();
   if (!p) throw new Error("Database not configured");
-  const { rowCount } = await p.query(
-    `DELETE FROM lexicon_terms
-      WHERE NOT (id = ANY($1::text[]))
-        AND lower(btrim(name)) = ANY($2::text[])`,
-    [activeIds, activeNames.map((n) => n.trim().toLowerCase())],
+  const { rows } = await p.query<{ total: string; stale: string }>(
+    `SELECT count(*)::text AS total,
+            count(*) FILTER (WHERE NOT (id = ANY($1::text[])))::text AS stale
+       FROM lexicon_terms`,
+    [activeIds],
   );
+  const total = Number(rows[0]?.total ?? 0);
+  const stale = Number(rows[0]?.stale ?? 0);
+  if (stale === 0) return 0;
+  if (stale > Math.max(1, Math.floor(total / 4))) {
+    throw new Error(`Refusing to prune ${stale} of ${total} lexicon rows — Notion read looks incomplete`);
+  }
+  const { rowCount } = await p.query(`DELETE FROM lexicon_terms WHERE NOT (id = ANY($1::text[]))`, [activeIds]);
   return rowCount ?? 0;
 }
 
