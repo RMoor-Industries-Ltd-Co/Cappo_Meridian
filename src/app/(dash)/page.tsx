@@ -1,8 +1,10 @@
 import Link from "next/link";
 import { CircleDot, ExternalLink, Inbox, Video } from "lucide-react";
+import { auth } from "@/auth";
 import { Card, SectionTitle } from "@/components/ui/Card";
 import { Kpi } from "@/components/ui/Kpi";
 import { QuarterTabs } from "@/components/overview/QuarterTabs";
+import { founderForEmail } from "@/lib/founders";
 import { getConnector } from "@/lib/connectors";
 import { type BoardStatus, type BoardTask, clickupAmgBoard } from "@/lib/connectors/clickup";
 import {
@@ -72,6 +74,9 @@ export default async function Overview({
   searchParams: Promise<{ q?: string }>;
 }) {
   const { q } = await searchParams;
+  const session = await auth();
+  const founderLabel = founderForEmail(session?.user?.email);
+  const welcomeLabel = founderLabel ?? "Founder";
   const active: QuarterId =
     q && QUARTERS.some((x) => x.id === q) ? (q as QuarterId) : currentQuarter();
   const activeLabel = QUARTERS.find((x) => x.id === active)?.label ?? "Company";
@@ -109,7 +114,7 @@ export default async function Overview({
     <div className="flex flex-col gap-6">
       {/* Hero */}
       <section className="flex flex-col items-center pt-6 text-center">
-        <h1 className="text-3xl font-semibold italic text-fg">Welcome buddy!</h1>
+        <h1 className="text-3xl font-semibold italic text-fg">Welcome {welcomeLabel}</h1>
         <p className="mt-1 text-sm text-subtle">
           Today · {today} ·{" "}
           <span className="text-gold">
