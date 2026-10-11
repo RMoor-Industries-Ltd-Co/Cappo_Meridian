@@ -1,5 +1,20 @@
 # Deploying Cappo_Meridian
 
+## Server user standard
+
+The CAPPO Linode has two standard accounts:
+
+| User | Role |
+| --- | --- |
+| `admin` | Human/administrator access — manual server administration only |
+| `deploy` | GitHub Actions / MCP deployment operations — SSH key auth, Docker, `/opt/cappo` |
+
+`deploy` is the account the CI/CD pipeline and any deployment-capable MCP session authenticate
+as; it is the value of the `SSH_USER` GitHub repo secret. `admin` is a human-only account and is
+never used by automation. Older docs/scripts referencing `amg-admin` or `amg-deploy` describe a
+legacy naming scheme — those accounts are not the current standard; treat any such reference as
+historical context only.
+
 CI/CD: push to `main` → GitHub Actions runs **typecheck + lint + build**, then
 **builds the Docker image on the runner and pushes it to GHCR**, then SSHes to
 the Linode which **pulls the prebuilt image and restarts** (`web` app + `caddy`
@@ -19,7 +34,7 @@ Set under **Settings → Secrets and variables → Actions** (or via `gh secret 
 | Secret | Value |
 | --- | --- |
 | `SSH_HOST` | `173.230.138.81` (or `cappo.apex-meridian-group.com`) |
-| `SSH_USER` | `amg-deploy` (the CI deploy user on the Linode) |
+| `SSH_USER` | `deploy` (the standard CI/MCP deploy user on the Linode — see "Server user standard" above) |
 | `SSH_PRIVATE_KEY` | private key whose **public** key is in the server's `~/.ssh/authorized_keys` |
 
 Generate a dedicated deploy key (don't reuse a personal key):
@@ -30,7 +45,7 @@ ssh-keygen -t ed25519 -f cappo_deploy -N "" -C "cappo-deploy"
 # add the private key cappo_deploy to GitHub as SSH_PRIVATE_KEY
 gh secret set SSH_PRIVATE_KEY < cappo_deploy
 gh secret set SSH_HOST --body "173.230.138.81"
-gh secret set SSH_USER --body "amg-deploy"
+gh secret set SSH_USER --body "deploy"
 ```
 
 ## One-time: Linode host prep
