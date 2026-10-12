@@ -114,7 +114,15 @@ export default async function Overview({
     <div className="flex flex-col gap-6">
       {/* Hero */}
       <section className="flex flex-col items-center pt-6 text-center">
-        <h1 className="text-3xl font-semibold italic text-fg">Welcome {welcomeLabel}</h1>
+        <h1
+          className={
+            founderLabel
+              ? "founder-greeting text-3xl"
+              : "text-3xl font-semibold italic text-fg"
+          }
+        >
+          Welcome {welcomeLabel}
+        </h1>
         <p className="mt-1 text-sm text-subtle">
           Today · {today} ·{" "}
           <span className="text-gold">
