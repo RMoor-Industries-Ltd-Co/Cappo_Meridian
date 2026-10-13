@@ -1,3 +1,4 @@
+import Image from "next/image";
 import type { ReactNode } from "react";
 import type { FounderLabel } from "@/lib/founders";
 import { currentQuarter, type QuarterId } from "@/lib/quarters";
@@ -12,24 +13,40 @@ import { QuarterTabs } from "@/components/overview/QuarterTabs";
  * left-of-center, so text lives in the open right-side area), and
  * `overlayStrength` tunes the gradient darkness at that text-safe edge to
  * each source image's brightness, without ever darkening over the beast.
+ * `imageSize` is each asset's native pixel size, used so the full-bleed
+ * guardian-breakout layout (desktop) can reserve exact, uncropped layout
+ * space for it — see FounderHeroBanner below.
  */
 const FOUNDER_BANNERS: Record<
   FounderLabel,
-  { image: string; guardianTitle: string; contentAlign: "left" | "right"; overlayStrength: number }
+  {
+    image: string;
+    imageSize: { width: number; height: number };
+    guardianTitle: string;
+    contentAlign: "left" | "right";
+    overlayStrength: number;
+  }
 > = {
   "Founder 55": {
     image: "/founders/banners/founder-55-golden-bull.png",
+    imageSize: { width: 1916, height: 821 },
     guardianTitle: "Golden Bull Sentinel",
     contentAlign: "right",
     overlayStrength: 0.92,
   },
   "Founder 88": {
     image: "/founders/banners/founder-88-dragon-lion.png",
+    imageSize: { width: 1916, height: 821 },
     guardianTitle: "Dragon-Lion Sentinel",
     contentAlign: "right",
     overlayStrength: 0.8,
   },
 };
+
+// Desktop "guardian breakout" veil height — see comment on the desktop stage
+// below. Fixed (not responsive) so the room/text band reads consistently;
+// the image itself still scales fluidly with the full-bleed width.
+const VEIL_HEIGHT = 300;
 
 export function FounderHeroBanner({
   founderLabel,
@@ -52,51 +69,99 @@ export function FounderHeroBanner({
   const s = banner.overlayStrength;
   const overlay = `linear-gradient(${gradientDirection}, rgba(10,9,7,${s}) 0%, rgba(10,9,7,${s * 0.8}) 35%, rgba(10,9,7,${s * 0.35}) 62%, transparent 85%)`;
 
-  return (
-    <section
-      // The "founder-hero-active" class is a pure CSS hook (see globals.css)
-      // that suppresses AppShell's ambient .gold-pour beam via :has() — that
-      // beam renders unconditionally at the top of every dashboard page's
-      // <main>, so without this the old hero glow bleeds through above this
-      // banner. It carries no styling of its own.
-      className="founder-hero-active relative flex flex-col justify-center overflow-hidden rounded-2xl border border-border-strong px-6 py-8 sm:px-10 sm:py-10"
-      style={{
-        backgroundImage: `${overlay}, url(${banner.image})`,
-        backgroundSize: "cover",
-        backgroundPosition: "left center",
-        minHeight: "220px",
-      }}
-    >
-      {/* Mobile: deepen the wash so the guardian reads as a low-opacity background,
-          never a tiny foreground thumbnail competing with the greeting. */}
-      <div className="absolute inset-0 bg-bg/70 sm:hidden" aria-hidden="true" />
+  const content = (
+    <>
+      <h1 className="founder-greeting text-3xl sm:text-4xl">Welcome {founderLabel}</h1>
+      <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
+        <MetaChip>{today}</MetaChip>
+        <MetaChip>
+          {activeLabel === "Company" ? "Company view" : `${activeLabel} ${new Date().getFullYear()}`}
+        </MetaChip>
+        <MetaChip>Guardian Spirit Beast</MetaChip>
+        <MetaChip gold>{banner.guardianTitle}</MetaChip>
+      </div>
+      {daysToNext <= 45 && (
+        <p className="mt-2 text-xs text-subtle">
+          {currentQuarter()} ends in <span className="text-gold">{daysToNext} days</span>.
+        </p>
+      )}
+      <div className="mt-5">
+        <QuarterTabs active={active} />
+      </div>
+    </>
+  );
+  const contentWrapClass =
+    banner.contentAlign === "right" ? "w-full sm:ml-auto sm:max-w-md" : "w-full sm:max-w-md";
 
-      <div
-        className={
-          banner.contentAlign === "right"
-            ? "relative z-10 w-full sm:ml-auto sm:max-w-md"
-            : "relative z-10 w-full sm:max-w-md"
-        }
+  return (
+    // Full-bleed breakout (sm: and up only — see .founder-hero-breakout in
+    // globals.css): escapes the dashboard content wrapper's max-width/padding
+    // so the banner spans edge-to-edge of <main>'s own content box (which
+    // already excludes the sidebar), using cqw units rather than vw so it
+    // never bleeds under the sidebar.
+    <div className="founder-hero-breakout">
+      {/* Mobile (<sm): unchanged contained, low-opacity-wash card from #78/#79. */}
+      <section
+        // The "founder-hero-active" class is a pure CSS hook (see globals.css)
+        // that suppresses AppShell's ambient .gold-pour beam via :has() — that
+        // beam renders unconditionally at the top of every dashboard page's
+        // <main>, so without this the old hero glow bleeds through above this
+        // banner. It carries no other styling of its own.
+        className="founder-hero-active relative flex min-h-[220px] flex-col justify-center overflow-hidden rounded-2xl border border-border-strong px-6 py-8 sm:hidden"
+        style={{
+          backgroundImage: `${overlay}, url(${banner.image})`,
+          backgroundSize: "cover",
+          backgroundPosition: "left center",
+        }}
       >
-        <h1 className="founder-greeting text-3xl sm:text-4xl">Welcome {founderLabel}</h1>
-        <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
-          <MetaChip>{today}</MetaChip>
-          <MetaChip>
-            {activeLabel === "Company" ? "Company view" : `${activeLabel} ${new Date().getFullYear()}`}
-          </MetaChip>
-          <MetaChip>Guardian Spirit Beast</MetaChip>
-          <MetaChip gold>{banner.guardianTitle}</MetaChip>
-        </div>
-        {daysToNext <= 45 && (
-          <p className="mt-2 text-xs text-subtle">
-            {currentQuarter()} ends in <span className="text-gold">{daysToNext} days</span>.
-          </p>
-        )}
-        <div className="mt-5">
-          <QuarterTabs active={active} />
+        <div className="absolute inset-0 bg-bg/70" aria-hidden="true" />
+        <div className={`relative z-10 ${contentWrapClass}`}>{content}</div>
+      </section>
+
+      {/*
+        Desktop (sm+): "guardian breakout" stage. The approved asset is laid
+        out as a normal, full-width, uncropped image — its own intrinsic
+        aspect ratio (not a short "cover"-cropped banner box) sets the
+        element's height, so the document flow already reserves exactly
+        enough room for the whole guardian and the KPI row below it falls
+        into place naturally, no manual overlap math. A fixed-height "veil"
+        (the room/text band) sits on top of only the UPPER portion of that
+        same image, carrying the dark gradient + greeting — the lower
+        portion of the identical image continues undimmed beneath the veil,
+        reading as the guardian stepping out of the banner's frame rather
+        than being cropped inside it.
+      */}
+      <div className="founder-hero-active relative hidden sm:block">
+        <Image
+          src={banner.image}
+          alt={`${banner.guardianTitle} — ${founderLabel}'s guardian spirit beast`}
+          width={banner.imageSize.width}
+          height={banner.imageSize.height}
+          sizes="100vw"
+          priority
+          className="h-auto w-full select-none"
+        />
+        {/* Room/text veil — covers only the top VEIL_HEIGHT band, so the
+            gradient darkening never reaches the guardian's lower body. A
+            soft shadow at its own bottom edge reads as the banner's frame,
+            the threshold the guardian steps through. */}
+        <div
+          className="pointer-events-none absolute inset-x-0 top-0"
+          style={{
+            height: VEIL_HEIGHT,
+            backgroundImage: overlay,
+            boxShadow: "0 36px 48px -24px rgba(0,0,0,0.5)",
+          }}
+          aria-hidden="true"
+        />
+        <div
+          className="absolute inset-x-0 top-0 z-10 flex flex-col justify-center px-12"
+          style={{ height: VEIL_HEIGHT }}
+        >
+          <div className={contentWrapClass}>{content}</div>
         </div>
       </div>
-    </section>
+    </div>
   );
 }
 

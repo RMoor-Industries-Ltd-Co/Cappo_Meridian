@@ -25,7 +25,14 @@ export function AppShell({ user, children }: { user?: ShellUser | null; children
       <Sidebar user={user} />
       <div className="flex min-w-0 flex-1 flex-col">
         <Topbar onMenuClick={() => setDrawerOpen(true)} />
-        <main className="relative flex-1 overflow-y-auto">
+        <main
+          className="relative flex-1 overflow-y-auto [container-type:inline-size]"
+        >
+          {/* `container-type: inline-size` makes this element's own rendered
+              width (already excluding the sidebar) queryable via `cqw` units
+              by descendants — purely inert on its own; it only matters to
+              content that explicitly uses `cqw` (see FounderHeroBanner's
+              full-bleed breakout), and changes nothing about this page. */}
           {/* Poured-gold accent cascading from the top of the canvas */}
           <div className="gold-pour" aria-hidden />
           <div className="relative z-10 mx-auto max-w-[1400px] px-4 py-6 sm:px-6">
