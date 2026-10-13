@@ -10,9 +10,14 @@
 | **Stack path** | `/opt/cappo/` |
 | **Deployed via** | Manual deploy (Doppler + Docker Compose) |
 | **Doppler project** | `cappo-meridian / prd` |
-| **User** | `amg-admin` |
+| **Deployment user** | `deploy` (GitHub Actions / MCP — SSH key auth, Docker, `/opt/cappo`) |
+| **Human/admin user** | `admin` (manual server administration only) |
 
 **Rule: this server is for Cappo only. It is not the Allen-I-Verse server and not the Master Atelier server.**
+
+**Server user standard**: `admin` = human/administrator access; `deploy` = GitHub Actions / MCP
+deployment operations. Older references to `amg-admin` or `amg-deploy` describe a legacy naming
+scheme, not the current standard — treat them as historical context only.
 
 ---
 
@@ -38,7 +43,7 @@ caddy         caddy:2-alpine
 ### Restart with updated env vars (no image change)
 
 ```bash
-# SSH into 173.230.138.81 as amg-admin
+# SSH into 173.230.138.81 as deploy
 export DOPPLER_TOKEN="dp.st.prd.YOUR_TOKEN"
 cd /opt/cappo
 doppler run -- docker compose up -d --force-recreate web
