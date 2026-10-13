@@ -53,50 +53,57 @@ export function FounderHeroBanner({
   const overlay = `linear-gradient(${gradientDirection}, rgba(10,9,7,${s}) 0%, rgba(10,9,7,${s * 0.8}) 35%, rgba(10,9,7,${s * 0.35}) 62%, transparent 85%)`;
 
   return (
-    <section
-      // The "founder-hero-active" class is a pure CSS hook (see globals.css)
-      // that suppresses AppShell's ambient .gold-pour beam via :has() — that
-      // beam renders unconditionally at the top of every dashboard page's
-      // <main>, so without this the old hero glow bleeds through above this
-      // banner. It carries no styling of its own.
-      className="founder-hero-active relative flex flex-col justify-center overflow-hidden rounded-2xl border border-border-strong px-6 py-8 sm:px-10 sm:py-10"
-      style={{
-        backgroundImage: `${overlay}, url(${banner.image})`,
-        backgroundSize: "cover",
-        backgroundPosition: "left center",
-        minHeight: "220px",
-      }}
-    >
-      {/* Mobile: deepen the wash so the guardian reads as a low-opacity background,
-          never a tiny foreground thumbnail competing with the greeting. */}
-      <div className="absolute inset-0 bg-bg/70 sm:hidden" aria-hidden="true" />
-
-      <div
-        className={
-          banner.contentAlign === "right"
-            ? "relative z-10 w-full sm:ml-auto sm:max-w-md"
-            : "relative z-10 w-full sm:max-w-md"
-        }
+    // Full-bleed breakout (sm: and up only — see .founder-hero-breakout in
+    // globals.css): escapes the dashboard content wrapper's max-width/padding
+    // so the banner spans edge-to-edge of <main>'s own content box (which
+    // already excludes the sidebar), using cqw units rather than vw so it
+    // never bleeds under the sidebar. Mobile keeps the original contained,
+    // low-opacity-wash treatment unchanged.
+    <div className="founder-hero-breakout">
+      <section
+        // The "founder-hero-active" class is a pure CSS hook (see globals.css)
+        // that suppresses AppShell's ambient .gold-pour beam via :has() — that
+        // beam renders unconditionally at the top of every dashboard page's
+        // <main>, so without this the old hero glow bleeds through above this
+        // banner. It carries no other styling of its own.
+        className="founder-hero-active relative flex min-h-[220px] flex-col justify-center overflow-hidden rounded-2xl border border-border-strong px-6 py-8 sm:min-h-[390px] sm:rounded-none sm:border-x-0 sm:px-12 sm:py-10"
+        style={{
+          backgroundImage: `${overlay}, url(${banner.image})`,
+          backgroundSize: "cover",
+          backgroundPosition: "left center",
+        }}
       >
-        <h1 className="founder-greeting text-3xl sm:text-4xl">Welcome {founderLabel}</h1>
-        <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
-          <MetaChip>{today}</MetaChip>
-          <MetaChip>
-            {activeLabel === "Company" ? "Company view" : `${activeLabel} ${new Date().getFullYear()}`}
-          </MetaChip>
-          <MetaChip>Guardian Spirit Beast</MetaChip>
-          <MetaChip gold>{banner.guardianTitle}</MetaChip>
+        {/* Mobile: deepen the wash so the guardian reads as a low-opacity background,
+            never a tiny foreground thumbnail competing with the greeting. */}
+        <div className="absolute inset-0 bg-bg/70 sm:hidden" aria-hidden="true" />
+
+        <div
+          className={
+            banner.contentAlign === "right"
+              ? "relative z-10 w-full sm:ml-auto sm:max-w-md"
+              : "relative z-10 w-full sm:max-w-md"
+          }
+        >
+          <h1 className="founder-greeting text-3xl sm:text-4xl">Welcome {founderLabel}</h1>
+          <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
+            <MetaChip>{today}</MetaChip>
+            <MetaChip>
+              {activeLabel === "Company" ? "Company view" : `${activeLabel} ${new Date().getFullYear()}`}
+            </MetaChip>
+            <MetaChip>Guardian Spirit Beast</MetaChip>
+            <MetaChip gold>{banner.guardianTitle}</MetaChip>
+          </div>
+          {daysToNext <= 45 && (
+            <p className="mt-2 text-xs text-subtle">
+              {currentQuarter()} ends in <span className="text-gold">{daysToNext} days</span>.
+            </p>
+          )}
+          <div className="mt-5">
+            <QuarterTabs active={active} />
+          </div>
         </div>
-        {daysToNext <= 45 && (
-          <p className="mt-2 text-xs text-subtle">
-            {currentQuarter()} ends in <span className="text-gold">{daysToNext} days</span>.
-          </p>
-        )}
-        <div className="mt-5">
-          <QuarterTabs active={active} />
-        </div>
-      </div>
-    </section>
+      </section>
+    </div>
   );
 }
 

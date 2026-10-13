@@ -125,6 +125,28 @@ main:has(.founder-hero-active) .gold-pour {
   display: none;
 }
 
+/* Founder banner full-bleed breakout (sm: and up). AppShell's content wrapper
+   is `mx-auto max-w-[1400px] px-4 sm:px-6` nested inside `<main>`, which in
+   turn sits beside the sidebar — so escaping to edge-to-edge needs to measure
+   against `<main>`'s own rendered width (set up as a cqw query container via
+   `container-type: inline-size` in AppShell), not the raw viewport (`vw`),
+   which would ignore the sidebar and bleed under it. Every ancestor between
+   this element and `<main>` is itself centered/symmetric (`mx-auto`, equal
+   left/right padding), so the standard viewport-breakout formula carries over
+   unit-for-unit with `cqw` in place of `vw`. Mobile is left in normal flow —
+   the banner stays contained there, matching its existing low-opacity-wash
+   treatment. */
+@media (min-width: 640px) {
+  .founder-hero-breakout {
+    position: relative;
+    left: 50%;
+    right: 50%;
+    width: 100cqw;
+    margin-left: -50cqw;
+    margin-right: -50cqw;
+  }
+}
+
 /* Gold-edged panel */
 .panel {
   background: linear-gradient(180deg, var(--panel-2), var(--panel));
