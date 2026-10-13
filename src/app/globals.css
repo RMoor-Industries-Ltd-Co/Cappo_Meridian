@@ -137,6 +137,21 @@ body {
   color: transparent;
 }
 
+/* Founder-only greeting treatment (Overview hero) — reserved for a resolved
+   "Founder 55" / "Founder 88" label; the generic "Founder" fallback keeps the
+   default heading style. Restrained: serif display face, warm gold gradient,
+   a soft glow instead of an outline or drop shadow, modest tracking. */
+.founder-greeting {
+  font-family: var(--font-cinzel), var(--font-geist-sans), serif;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  background: linear-gradient(180deg, var(--gold-bright), var(--gold-deep));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 0 10px var(--gold-glow));
+}
+
 .btn-gold {
   background: linear-gradient(180deg, var(--gold-bright), var(--gold));
   color: #2a1f06;
