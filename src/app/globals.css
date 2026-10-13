@@ -117,6 +117,14 @@ body {
   background: linear-gradient(to bottom, #fff6df, var(--gold-bright), transparent);
 }
 
+/* .gold-pour is AppShell's ambient top-of-page decoration, rendered on every
+   dashboard route regardless of page content. The Founder guardian banner
+   (.founder-hero-active) replaces the hero area rather than sitting inside
+   it, so the old gold beam must not bleed through above it. */
+main:has(.founder-hero-active) .gold-pour {
+  display: none;
+}
+
 /* Gold-edged panel */
 .panel {
   background: linear-gradient(180deg, var(--panel-2), var(--panel));

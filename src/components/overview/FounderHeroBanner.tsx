@@ -54,7 +54,12 @@ export function FounderHeroBanner({
 
   return (
     <section
-      className="relative flex flex-col justify-center overflow-hidden rounded-2xl border border-border-strong px-6 py-8 sm:px-10 sm:py-10"
+      // The "founder-hero-active" class is a pure CSS hook (see globals.css)
+      // that suppresses AppShell's ambient .gold-pour beam via :has() — that
+      // beam renders unconditionally at the top of every dashboard page's
+      // <main>, so without this the old hero glow bleeds through above this
+      // banner. It carries no styling of its own.
+      className="founder-hero-active relative flex flex-col justify-center overflow-hidden rounded-2xl border border-border-strong px-6 py-8 sm:px-10 sm:py-10"
       style={{
         backgroundImage: `${overlay}, url(${banner.image})`,
         backgroundSize: "cover",
