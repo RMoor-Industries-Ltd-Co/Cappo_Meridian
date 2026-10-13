@@ -6,25 +6,28 @@ import { QuarterTabs } from "@/components/overview/QuarterTabs";
 /**
  * Approved Founder guardian spirit beast banners — see
  * docs/contracts/founder-welcome-banner-contract.md for the design contract
- * these assets and their treatment are governed by. Each overlay is tuned to
- * that founder's source image brightness (Founder 55's is fire-lit and
- * bright; Founder 88's is already dark/stone-lit), not to a shared default.
+ * these assets and their treatment are governed by. The beast is the identity
+ * anchor; the greeting is the overlay — `contentAlign` says which side of the
+ * banner is clear of the beast (both current assets place the guardian
+ * left-of-center, so text lives in the open right-side area), and
+ * `overlayStrength` tunes the gradient darkness at that text-safe edge to
+ * each source image's brightness, without ever darkening over the beast.
  */
 const FOUNDER_BANNERS: Record<
   FounderLabel,
-  { image: string; guardianTitle: string; overlay: string }
+  { image: string; guardianTitle: string; contentAlign: "left" | "right"; overlayStrength: number }
 > = {
   "Founder 55": {
     image: "/founders/banners/founder-55-golden-bull.png",
     guardianTitle: "Golden Bull Sentinel",
-    overlay:
-      "linear-gradient(90deg, rgba(10,9,7,0.92) 0%, rgba(10,9,7,0.74) 40%, rgba(10,9,7,0.4) 68%, rgba(10,9,7,0.18) 100%)",
+    contentAlign: "right",
+    overlayStrength: 0.92,
   },
   "Founder 88": {
     image: "/founders/banners/founder-88-dragon-lion.png",
     guardianTitle: "Dragon-Lion Sentinel",
-    overlay:
-      "linear-gradient(90deg, rgba(10,9,7,0.85) 0%, rgba(10,9,7,0.55) 40%, rgba(10,9,7,0.22) 68%, rgba(10,9,7,0.08) 100%)",
+    contentAlign: "right",
+    overlayStrength: 0.8,
   },
 };
 
@@ -42,12 +45,18 @@ export function FounderHeroBanner({
   daysToNext: number;
 }) {
   const banner = FOUNDER_BANNERS[founderLabel];
+  // The beast sits left-of-center in both approved assets, so the gradient
+  // must concentrate its darkness on the text-safe side (here, the right)
+  // and fade toward transparent over the beast — never the reverse.
+  const gradientDirection = banner.contentAlign === "right" ? "to left" : "to right";
+  const s = banner.overlayStrength;
+  const overlay = `linear-gradient(${gradientDirection}, rgba(10,9,7,${s}) 0%, rgba(10,9,7,${s * 0.8}) 35%, rgba(10,9,7,${s * 0.35}) 62%, transparent 85%)`;
 
   return (
     <section
       className="relative flex flex-col justify-center overflow-hidden rounded-2xl border border-border-strong px-6 py-8 sm:px-10 sm:py-10"
       style={{
-        backgroundImage: `${banner.overlay}, url(${banner.image})`,
+        backgroundImage: `${overlay}, url(${banner.image})`,
         backgroundSize: "cover",
         backgroundPosition: "left center",
         minHeight: "220px",
@@ -57,7 +66,13 @@ export function FounderHeroBanner({
           never a tiny foreground thumbnail competing with the greeting. */}
       <div className="absolute inset-0 bg-bg/70 sm:hidden" aria-hidden="true" />
 
-      <div className="relative z-10 max-w-xl">
+      <div
+        className={
+          banner.contentAlign === "right"
+            ? "relative z-10 w-full sm:ml-auto sm:max-w-md"
+            : "relative z-10 w-full sm:max-w-md"
+        }
+      >
         <h1 className="founder-greeting text-3xl sm:text-4xl">Welcome {founderLabel}</h1>
         <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
           <MetaChip>{today}</MetaChip>
