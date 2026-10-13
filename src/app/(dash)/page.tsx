@@ -5,6 +5,7 @@ import { Card, SectionTitle } from "@/components/ui/Card";
 import { Kpi } from "@/components/ui/Kpi";
 import { QuarterTabs } from "@/components/overview/QuarterTabs";
 import { founderForEmail } from "@/lib/founders";
+import { FounderHeroBanner } from "@/components/overview/FounderHeroBanner";
 import { getConnector } from "@/lib/connectors";
 import { type BoardStatus, type BoardTask, clickupAmgBoard } from "@/lib/connectors/clickup";
 import {
@@ -113,31 +114,33 @@ export default async function Overview({
   return (
     <div className="flex flex-col gap-6">
       {/* Hero */}
-      <section className="flex flex-col items-center pt-6 text-center">
-        <h1
-          className={
-            founderLabel
-              ? "founder-greeting text-3xl"
-              : "text-3xl font-semibold italic text-fg"
-          }
-        >
-          Welcome {welcomeLabel}
-        </h1>
-        <p className="mt-1 text-sm text-subtle">
-          Today · {today} ·{" "}
-          <span className="text-gold">
-            {activeLabel === "Company" ? "Company view" : `${activeLabel} ${new Date().getFullYear()}`}
-          </span>
-        </p>
-        <div className="mt-4">
-          <QuarterTabs active={active} />
-        </div>
-        {daysToNext <= 45 && (
-          <p className="mt-2 text-xs text-subtle">
-            {currentQuarter()} ends in <span className="text-gold">{daysToNext} days</span>.
+      {founderLabel ? (
+        <FounderHeroBanner
+          founderLabel={founderLabel}
+          today={today}
+          activeLabel={activeLabel}
+          active={active}
+          daysToNext={daysToNext}
+        />
+      ) : (
+        <section className="flex flex-col items-center pt-6 text-center">
+          <h1 className="text-3xl font-semibold italic text-fg">Welcome {welcomeLabel}</h1>
+          <p className="mt-1 text-sm text-subtle">
+            Today · {today} ·{" "}
+            <span className="text-gold">
+              {activeLabel === "Company" ? "Company view" : `${activeLabel} ${new Date().getFullYear()}`}
+            </span>
           </p>
-        )}
-      </section>
+          <div className="mt-4">
+            <QuarterTabs active={active} />
+          </div>
+          {daysToNext <= 45 && (
+            <p className="mt-2 text-xs text-subtle">
+              {currentQuarter()} ends in <span className="text-gold">{daysToNext} days</span>.
+            </p>
+          )}
+        </section>
+      )}
 
       {/* Live KPI row */}
       <section className="grid grid-cols-2 gap-4 lg:grid-cols-4">
