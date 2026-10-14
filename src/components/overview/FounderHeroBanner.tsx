@@ -142,16 +142,17 @@ export function FounderHeroBanner({
           className="h-auto w-full select-none"
         />
         {/* Room/text veil — covers only the top VEIL_HEIGHT band, so the
-            gradient darkening never reaches the guardian's lower body. A
-            soft shadow at its own bottom edge reads as the banner's frame,
-            the threshold the guardian steps through. */}
+            gradient darkening never reaches the guardian's lower body. No
+            box-shadow here: a full-width drop shadow at the veil's bottom
+            edge cast a visible dark band across the guardian at every
+            brightness (most obvious on Founder 55's sunset-lit scene,
+            where it read as an unintended smudge across the bull's neck),
+            since the shadow ignored the gradient's own per-side fade and
+            the asset's actual lighting. The gradient alone is the banner's
+            frame. */}
         <div
           className="pointer-events-none absolute inset-x-0 top-0"
-          style={{
-            height: VEIL_HEIGHT,
-            backgroundImage: overlay,
-            boxShadow: "0 36px 48px -24px rgba(0,0,0,0.5)",
-          }}
+          style={{ height: VEIL_HEIGHT, backgroundImage: overlay }}
           aria-hidden="true"
         />
         <div
