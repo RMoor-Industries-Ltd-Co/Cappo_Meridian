@@ -4,6 +4,7 @@ import { clickupConnector } from "./clickup";
 import { notionConnector } from "./notion";
 import { driveConnector } from "./drive";
 import { gmailConnector } from "./gmail";
+import { shopifyConnector } from "./shopify";
 
 /** The connector registry — single source of truth for all integrations. */
 export const connectors: Connector[] = [
@@ -11,6 +12,7 @@ export const connectors: Connector[] = [
   notionConnector,
   driveConnector,
   gmailConnector,
+  shopifyConnector,
 ];
 
 export function getConnector(id: string): Connector | undefined {

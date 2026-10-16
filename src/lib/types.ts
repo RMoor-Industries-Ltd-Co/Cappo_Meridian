@@ -4,7 +4,7 @@
  * and API can treat the four services uniformly.
  */
 
-export type ConnectorId = "clickup" | "notion" | "drive" | "gmail";
+export type ConnectorId = "clickup" | "notion" | "drive" | "gmail" | "shopify";
 
 export type ItemKind = "task" | "doc" | "file" | "message";
 

@@ -119,6 +119,90 @@ async function ensureSchema(p: Pool): Promise<void> {
           generated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
           error         TEXT
         );
+
+        -- ── CAPPO Milestone 5: governed product data + Shopify reconciliation ──
+        -- Rollback (no down-migration framework exists in this repo — this is
+        -- the documented manual rollback, children before parents):
+        --   DROP TABLE IF EXISTS product_sync_audit_log;
+        --   DROP TABLE IF EXISTS product_sync_reconciliation_failures;
+        --   DROP TABLE IF EXISTS inventory_snapshots;
+        --   DROP TABLE IF EXISTS product_sync_mappings;
+        --   DROP TABLE IF EXISTS product_sync_runs;
+
+        -- One row per reconciled identity: a Notion Official Product Catalog
+        -- page id matched to a Shopify variant. shopify_variant_id is UNIQUE so
+        -- a given Shopify variant can never be attached to two Notion products
+        -- at once, and upserts are keyed on it — re-running the sync with the
+        -- same match is a no-op update, never a duplicate row.
+        CREATE TABLE IF NOT EXISTS product_sync_mappings (
+          id                  BIGSERIAL PRIMARY KEY,
+          notion_product_id   TEXT NOT NULL,
+          shopify_product_id  TEXT,
+          shopify_variant_id  TEXT NOT NULL,
+          sku                 TEXT,
+          match_method        TEXT NOT NULL DEFAULT 'sku_exact',
+          matched_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+          created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+          updated_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+          UNIQUE (shopify_variant_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_product_sync_mappings_notion
+          ON product_sync_mappings(notion_product_id);
+
+        -- Append-only point-in-time inventory readings. "available" is
+        -- nullable and MUST stay that way: Shopify not reporting a quantity
+        -- for an item/location means "unknown," never "0 in stock" — a sync
+        -- that coerced null to 0 would misreport real stock as sold out.
+        CREATE TABLE IF NOT EXISTS inventory_snapshots (
+          id                        BIGSERIAL PRIMARY KEY,
+          shopify_variant_id        TEXT NOT NULL,
+          shopify_inventory_item_id TEXT,
+          location_id               TEXT,
+          available                 INT,
+          captured_at               TIMESTAMPTZ NOT NULL DEFAULT now()
+        );
+        CREATE INDEX IF NOT EXISTS idx_inventory_snapshots_variant_time
+          ON inventory_snapshots(shopify_variant_id, captured_at DESC);
+
+        -- One row per sync run (mirrors lexicon_sync_runs's existing pattern).
+        CREATE TABLE IF NOT EXISTS product_sync_runs (
+          id                      BIGSERIAL PRIMARY KEY,
+          ran_at                  TIMESTAMPTZ NOT NULL DEFAULT now(),
+          status                  TEXT NOT NULL DEFAULT 'success',
+          products_seen           INT NOT NULL DEFAULT 0,
+          mapped_count            INT NOT NULL DEFAULT 0,
+          unmapped_count          INT NOT NULL DEFAULT 0,
+          reconciliation_failures INT NOT NULL DEFAULT 0,
+          error                   TEXT
+        );
+
+        -- Specific reconciliation problems from a given run (ambiguous SKU
+        -- match, Shopify fetch error for one product, etc.) — kept distinct
+        -- from the run's own summary counts so each failure is inspectable.
+        CREATE TABLE IF NOT EXISTS product_sync_reconciliation_failures (
+          id              BIGSERIAL PRIMARY KEY,
+          sync_run_id     BIGINT REFERENCES product_sync_runs(id) ON DELETE CASCADE,
+          subject_type    TEXT NOT NULL,
+          subject_id      TEXT NOT NULL,
+          reason          TEXT NOT NULL,
+          detail          TEXT,
+          created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+        );
+        CREATE INDEX IF NOT EXISTS idx_product_sync_failures_run
+          ON product_sync_reconciliation_failures(sync_run_id);
+
+        -- Durable audit trail of every mapping/snapshot write a sync run makes.
+        CREATE TABLE IF NOT EXISTS product_sync_audit_log (
+          id                  BIGSERIAL PRIMARY KEY,
+          sync_run_id         BIGINT REFERENCES product_sync_runs(id) ON DELETE SET NULL,
+          action              TEXT NOT NULL,
+          notion_product_id   TEXT,
+          shopify_variant_id  TEXT,
+          detail              TEXT,
+          created_at          TIMESTAMPTZ NOT NULL DEFAULT now()
+        );
+        CREATE INDEX IF NOT EXISTS idx_product_sync_audit_run
+          ON product_sync_audit_log(sync_run_id);
       `)
       .then(() => undefined)
       .catch((e) => {
@@ -576,4 +660,197 @@ export async function getLastSuccessfulCappoReport(): Promise<
     `SELECT report_text, generated_at::text, error FROM cappo_reports WHERE report_text IS NOT NULL ORDER BY id DESC LIMIT 1`,
   );
   return rows[0] ?? null;
+}
+
+// ── CAPPO Milestone 5: product sync (Notion ↔ Shopify) ───────────────────────
+// See src/lib/productSync.ts for the reconciliation logic that calls these.
+
+export interface ProductSyncMapping {
+  id: string;
+  notion_product_id: string;
+  shopify_product_id: string | null;
+  shopify_variant_id: string;
+  sku: string | null;
+  match_method: string;
+  matched_at: string;
+  updated_at: string;
+}
+
+/** Idempotent: re-running with the same shopify_variant_id updates the
+ * existing row (keyed on the UNIQUE constraint) rather than duplicating it. */
+export async function upsertProductSyncMapping(m: {
+  notionProductId: string;
+  shopifyProductId: string | null;
+  shopifyVariantId: string;
+  sku: string | null;
+  matchMethod: string;
+}): Promise<ProductSyncMapping> {
+  const p = await db();
+  if (!p) throw new Error("Database not configured");
+  const { rows } = await p.query<ProductSyncMapping>(
+    `INSERT INTO product_sync_mappings
+       (notion_product_id, shopify_product_id, shopify_variant_id, sku, match_method)
+       VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (shopify_variant_id) DO UPDATE SET
+         notion_product_id  = EXCLUDED.notion_product_id,
+         shopify_product_id = EXCLUDED.shopify_product_id,
+         sku                = EXCLUDED.sku,
+         match_method       = EXCLUDED.match_method,
+         matched_at         = now(),
+         updated_at         = now()
+       RETURNING id::text, notion_product_id, shopify_product_id, shopify_variant_id, sku,
+                 match_method, matched_at::text, updated_at::text`,
+    [m.notionProductId, m.shopifyProductId, m.shopifyVariantId, m.sku, m.matchMethod],
+  );
+  return rows[0];
+}
+
+export async function listProductSyncMappings(): Promise<ProductSyncMapping[]> {
+  const p = await db();
+  if (!p) return [];
+  const { rows } = await p.query<ProductSyncMapping>(
+    `SELECT id::text, notion_product_id, shopify_product_id, shopify_variant_id, sku,
+            match_method, matched_at::text, updated_at::text
+       FROM product_sync_mappings ORDER BY updated_at DESC`,
+  );
+  return rows;
+}
+
+/** Records one point-in-time inventory reading. `available: null` is a valid,
+ * meaningful input — it must never be rewritten to 0 before calling this. */
+export async function recordInventorySnapshot(s: {
+  shopifyVariantId: string;
+  shopifyInventoryItemId: string | null;
+  locationId: string | null;
+  available: number | null;
+}): Promise<void> {
+  const p = await db();
+  if (!p) return;
+  await p.query(
+    `INSERT INTO inventory_snapshots
+       (shopify_variant_id, shopify_inventory_item_id, location_id, available)
+       VALUES ($1, $2, $3, $4)`,
+    [s.shopifyVariantId, s.shopifyInventoryItemId, s.locationId, s.available],
+  );
+}
+
+export interface LatestInventorySnapshot {
+  shopify_variant_id: string;
+  location_id: string | null;
+  available: number | null;
+  captured_at: string;
+}
+
+/** Most recent snapshot per (variant, location) — DISTINCT ON keeps this a
+ * single indexed scan rather than a correlated subquery per variant. */
+export async function listLatestInventorySnapshots(): Promise<LatestInventorySnapshot[]> {
+  const p = await db();
+  if (!p) return [];
+  const { rows } = await p.query<LatestInventorySnapshot>(
+    `SELECT DISTINCT ON (shopify_variant_id, location_id)
+            shopify_variant_id, location_id, available, captured_at::text
+       FROM inventory_snapshots
+      ORDER BY shopify_variant_id, location_id, captured_at DESC`,
+  );
+  return rows;
+}
+
+export interface ProductSyncRun {
+  id: string;
+  ran_at: string;
+  status: string;
+  products_seen: number;
+  mapped_count: number;
+  unmapped_count: number;
+  reconciliation_failures: number;
+  error: string | null;
+}
+
+export async function createProductSyncRun(r: {
+  status: string;
+  productsSeen: number;
+  mappedCount: number;
+  unmappedCount: number;
+  reconciliationFailures: number;
+  error: string | null;
+}): Promise<ProductSyncRun> {
+  const p = await db();
+  if (!p) throw new Error("Database not configured");
+  const { rows } = await p.query<ProductSyncRun>(
+    `INSERT INTO product_sync_runs
+       (status, products_seen, mapped_count, unmapped_count, reconciliation_failures, error)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING id::text, ran_at::text, status, products_seen, mapped_count, unmapped_count,
+                 reconciliation_failures, error`,
+    [r.status, r.productsSeen, r.mappedCount, r.unmappedCount, r.reconciliationFailures, r.error],
+  );
+  return rows[0];
+}
+
+export async function getLastProductSyncRun(): Promise<ProductSyncRun | null> {
+  const p = await db();
+  if (!p) return null;
+  const { rows } = await p.query<ProductSyncRun>(
+    `SELECT id::text, ran_at::text, status, products_seen, mapped_count, unmapped_count,
+            reconciliation_failures, error
+       FROM product_sync_runs ORDER BY id DESC LIMIT 1`,
+  );
+  return rows[0] ?? null;
+}
+
+export async function recordProductSyncFailure(f: {
+  syncRunId: string;
+  subjectType: string;
+  subjectId: string;
+  reason: string;
+  detail: string | null;
+}): Promise<void> {
+  const p = await db();
+  if (!p) return;
+  await p.query(
+    `INSERT INTO product_sync_reconciliation_failures
+       (sync_run_id, subject_type, subject_id, reason, detail)
+       VALUES ($1, $2, $3, $4, $5)`,
+    [f.syncRunId, f.subjectType, f.subjectId, f.reason, f.detail],
+  );
+}
+
+export interface ProductSyncFailure {
+  id: string;
+  subject_type: string;
+  subject_id: string;
+  reason: string;
+  detail: string | null;
+  created_at: string;
+}
+
+export async function listProductSyncFailures(syncRunId?: string): Promise<ProductSyncFailure[]> {
+  const p = await db();
+  if (!p) return [];
+  const { rows } = await p.query<ProductSyncFailure>(
+    syncRunId
+      ? `SELECT id::text, subject_type, subject_id, reason, detail, created_at::text
+           FROM product_sync_reconciliation_failures WHERE sync_run_id = $1 ORDER BY id DESC`
+      : `SELECT id::text, subject_type, subject_id, reason, detail, created_at::text
+           FROM product_sync_reconciliation_failures ORDER BY id DESC LIMIT 100`,
+    syncRunId ? [syncRunId] : [],
+  );
+  return rows;
+}
+
+export async function recordProductSyncAudit(a: {
+  syncRunId: string | null;
+  action: string;
+  notionProductId: string | null;
+  shopifyVariantId: string | null;
+  detail: string | null;
+}): Promise<void> {
+  const p = await db();
+  if (!p) return;
+  await p.query(
+    `INSERT INTO product_sync_audit_log
+       (sync_run_id, action, notion_product_id, shopify_variant_id, detail)
+       VALUES ($1, $2, $3, $4, $5)`,
+    [a.syncRunId, a.action, a.notionProductId, a.shopifyVariantId, a.detail],
+  );
 }
