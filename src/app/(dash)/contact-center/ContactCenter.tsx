@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { PhoneCall, Clock, ExternalLink, ChevronLeft, ChevronRight } from "lucide-react";
 import { PLAYBOOKS, fillScript, suggestPlaybook, type ScriptStage } from "@/lib/callScripts";
 import { directoryFor } from "@/lib/suppliers";
+import type { GovernedContactCenterProduct } from "@/lib/connectors/products";
 
 interface Supplier {
   id?: string;
@@ -82,6 +83,7 @@ export function ContactCenter() {
   const [stageIdx, setStageIdx] = useState(0);
   const [saving, setSaving] = useState(false);
   const [result, setResult] = useState<{ msg: string; url?: string | null } | null>(null);
+  const [governedProducts, setGovernedProducts] = useState<GovernedContactCenterProduct[]>([]);
   const notesRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
@@ -92,6 +94,28 @@ export function ContactCenter() {
     Promise.resolve(localStorage.getItem("cc_rep")).then((v) => v && setRep(v));
     fetch("/api/contacts").then((r) => r.json()).then((d) => setSuppliers(d.suppliers ?? [])).catch(() => {});
   }, []);
+
+  // Additive, Notion-governed product panel — see governedProductsForSupplier's
+  // phase-out doc comment. Never replaces the directoryFor() lookup below.
+  useEffect(() => {
+    const name = form.name?.trim();
+    // No setState here when the name is empty: the render below already
+    // gates the panel on `form.name`, so a cleared selection hides it
+    // without needing to reset governedProducts from inside the effect.
+    if (!name) return;
+    let cancelled = false;
+    fetch(`/api/contact-center/governed-product?supplier=${encodeURIComponent(name)}`)
+      .then((r) => r.json())
+      .then((d: { products?: GovernedContactCenterProduct[] }) => {
+        if (!cancelled) setGovernedProducts(d.products ?? []);
+      })
+      .catch(() => {
+        if (!cancelled) setGovernedProducts([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [form.name]);
 
   function set<K extends keyof Supplier>(k: K, v: Supplier[K]) {
     setForm((f) => ({ ...f, [k]: v }));
@@ -379,6 +403,32 @@ export function ContactCenter() {
               </p>
             )}
           </div>
+
+          {/* Governed Product (Notion-verified) — additive, phase-out seam for
+              the hardcoded panel above. See governedProductsForSupplier's doc
+              comment in connectors/products.ts. */}
+          {form.name && governedProducts.length > 0 && (
+            <div className="panel p-4">
+              <div className="mb-3 flex items-center justify-between">
+                <h2 className="text-sm font-semibold text-fg">Governed Product (Notion-verified)</h2>
+                <span className="rounded-full bg-pos/15 px-2 py-0.5 text-[11px] font-medium text-pos">approved</span>
+              </div>
+              <ul className="flex flex-col gap-3">
+                {governedProducts.map((gp) => (
+                  <li key={gp.notionId} className="text-xs">
+                    <p className="text-sm font-medium text-fg">{gp.name}</p>
+                    <p className="mt-0.5 text-muted">
+                      {gp.category} · {gp.architectureRole} · {gp.developmentGate}
+                    </p>
+                    {gp.guardianNotes && <p className="mt-1 text-subtle">{gp.guardianNotes}</p>}
+                    <p className="mt-1 text-subtle">
+                      Verified {new Date(gp.lastVerified).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
 
           {/* Lead identity */}
           <div className="panel p-4">

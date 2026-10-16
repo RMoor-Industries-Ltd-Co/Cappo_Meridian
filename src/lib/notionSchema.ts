@@ -30,3 +30,22 @@ export const NOTION_DS = {
   actions: "0fa2bf9a-405f-4853-ad29-8cdf135429da",
   meetings: "13b15cab-6c7c-4738-bd3f-6bb50ec228b1",
 } as const;
+
+/**
+ * CAPPO Milestone 5 — governed product data sources. These three databases are
+ * the single authority for product identity, specifications, and supplier
+ * relationships; `src/lib/connectors/products.ts` reads them. Do not
+ * introduce a second/duplicate product or supplier registry anywhere else —
+ * `NOTION_DS.catalog` above is the SAME "Official Product Catalog" data
+ * source as `productCatalog` below (kept as a separate, explicitly-named
+ * constant here since the governed-product layer treats it as one of three
+ * co-equal sources, not a one-off wiki collection).
+ */
+export const GOVERNED_PRODUCT_DS = {
+  /** Official Product Catalog — product/family/variation/sellable/appointment identity. */
+  productCatalog: "c60f6845-4623-4180-88d3-5f429f101275",
+  /** Official Product Data — per-product specification/attribute records (EAV-shaped). */
+  productData: "3b7e4a15-0469-80a5-88a1-000b1648e00b",
+  /** Official Suppliers & Manufacturers Database. */
+  suppliers: "3b7e4a15-0469-808c-9075-000b89115100",
+} as const;

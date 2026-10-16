@@ -99,6 +99,15 @@ const schema = z.object({
   // effect unless the entity already has its own knowledgeFolderId set in the UI.
   // Durable across redeploys (env), unlike the in-memory GrantOps store.
   GRANTOPS_ENTITY_FOLDERS: z.string().optional(),
+
+  // Shopify — read-only Admin GraphQL API connector (CAPPO Milestone 5).
+  // Custom-app Admin API access token, scoped read_products + read_inventory
+  // only (see docs/shopify-connector.md). No write scopes are ever used by
+  // this connector by design — see src/lib/connectors/shopify.ts.
+  SHOPIFY_STORE_DOMAIN: z.string().optional(), // e.g. "your-store.myshopify.com"
+  SHOPIFY_ADMIN_API_ACCESS_TOKEN: z.string().optional(),
+  // Defaults to a known-good pinned version in code if unset — see shopify.ts.
+  SHOPIFY_API_VERSION: z.string().optional(),
 });
 
 const parsed = schema.safeParse(process.env);
@@ -126,3 +135,7 @@ export const isAiConfigured = () =>
 
 /** Persistence is available only when a database URL is set. */
 export const isDbConfigured = () => Boolean(env.DATABASE_URL);
+
+/** The read-only Shopify connector needs both the store domain and a token. */
+export const isShopifyConfigured = () =>
+  Boolean(env.SHOPIFY_STORE_DOMAIN && env.SHOPIFY_ADMIN_API_ACCESS_TOKEN);
