@@ -1,4 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
+import { auth } from "@/auth";
+import { isAuthConfigured } from "@/lib/env";
 import { isProposalsConfigured, updateProposalReview } from "@/lib/connectors/proposals";
 import type { Decision, ReviewStatus } from "@/lib/connectors/proposals";
 
@@ -7,13 +9,25 @@ export const dynamic = "force-dynamic";
 const REVIEW_STATUSES: ReviewStatus[] = ["Not Reviewed", "In Review", "Reviewed"];
 const DECISIONS: Decision[] = ["Pending", "Approved Direction", "Revision Requested", "Deferred", "Rejected"];
 
+/** See the sibling /api/proposals route's doc comment on `requireSession`. */
+async function requireSession(): Promise<boolean> {
+  if (!isAuthConfigured()) return true;
+  const session = await auth();
+  return Boolean(session?.user);
+}
+
 /**
  * PATCH /api/proposals/[id] — persist a review outcome. Updating the
  * Review Status / Decision here moves the record to the correct tab on
  * the next read; this endpoint never touches anything outside Notion's
- * Capture/Ideas record itself (no merge/deploy/spend side effect).
+ * Capture/Ideas record itself (no merge/deploy/spend side effect — see
+ * `updateProposalReview`'s own doc comment on the governance rule this
+ * enforces).
  */
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  if (!(await requireSession())) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
   if (!isProposalsConfigured()) {
     return NextResponse.json({ error: "Notion not connected" }, { status: 503 });
   }

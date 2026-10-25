@@ -43,7 +43,10 @@ export interface Proposal {
   brandIds: string[];
   domainIds: string[];
   relatedInitiativeIds: string[];
+  /** Notion's system-managed creation timestamp — always present, used for duplicate detection. */
   created: string | null;
+  /** The manually-entered "Created" date property, if anyone filled it in. Display only; never relied on for dedupe since it's frequently blank. */
+  createdManual: string | null;
 }
 
 type RichTextToken = { plain_text: string };
@@ -59,6 +62,8 @@ export interface NProp {
 export interface NRow {
   id: string;
   url?: string;
+  /** Notion's own system-managed creation timestamp — always present, never manually editable. */
+  created_time?: string;
   properties: Record<string, NProp>;
 }
 
@@ -100,7 +105,13 @@ export function mapProposal(r: NRow): Proposal {
     brandIds: relOf(r, "Brand"),
     domainIds: relOf(r, "Domain"),
     relatedInitiativeIds: relOf(r, "Related Initiative"),
-    created: dateOf(r, "Created"),
+    // Notion's system `created_time`, not the manual "Created" date property
+    // (that one's blank on plenty of real rows — a manually-entered field
+    // is never a reliable timestamp to dedupe against). Kept separately
+    // below as `createdManual` so nothing already relying on the manual
+    // field for display loses it.
+    created: r.created_time ?? null,
+    createdManual: dateOf(r, "Created"),
   };
 }
 
@@ -206,7 +217,29 @@ export async function createProposal(input: NewProposalInput): Promise<Proposal>
  * retry) within the window re-sends an identical title. Notion has no
  * unique constraint to lean on, so this checks recent same-title records
  * before creating — "prevent duplicate submissions where feasible," not a
- * hard guarantee.
+ * hard guarantee. Keyed off Notion's own `created_time` (always present,
+ * system-managed) rather than the manually-entered "Created" date property,
+ * which is blank on plenty of real rows and would silently skip them.
+ *
+ * Known limitations of title+time matching (documented, not solved here):
+ * - Two *different*, independently-submitted proposals that happen to
+ *   share an exact title within the window read as the same "duplicate" —
+ *   this guard cannot distinguish "same submission, retried" from
+ *   "coincidentally identical wording." It trades a rare false positive
+ *   (a legitimate second submission is silently treated as the first)
+ *   for the much more common case it's built for (an accidental retry).
+ * - The match is case-insensitive and whitespace-trimmed only — it is not
+ *   a fuzzy match, so "Financial Review" and "Financial  Review." (extra
+ *   space, trailing period) are treated as different titles and both get
+ *   created.
+ * - The window is wall-clock, scanning every row each call (`listAllRows`)
+ *   — fine at this database's current size, but it re-reads the whole
+ *   data source on every submission; it does not scale to a very large
+ *   Capture/Ideas database without a real index.
+ * - A legitimate resubmission of the same title *after* the window simply
+ *   creates a second record, same as any other Capture/Ideas entry today.
+ * See `submitProposal` below for the concurrent-request case this alone
+ * doesn't cover.
  */
 export async function findRecentDuplicateTitle(
   title: string,
@@ -225,6 +258,51 @@ export async function findRecentDuplicateTitle(
     if (now - createdAt <= withinMs) return p;
   }
   return null;
+}
+
+/**
+ * In-flight request coalescing, keyed by normalized title: a second
+ * `submitProposal` call for the same title while the first is still
+ * writing to Notion awaits that same in-flight result instead of racing
+ * it with its own `findRecentDuplicateTitle` read (which can't see a write
+ * that hasn't landed yet). This closes the concurrent-double-click gap
+ * within one server process/instance.
+ *
+ * Limitation (documented, not solved): this is process-local. Two
+ * near-simultaneous requests landing on two different server instances —
+ * e.g. two app-server replicas behind a load balancer, or two people
+ * submitting the identical title within the same couple of seconds —
+ * are not coalesced by this map; `findRecentDuplicateTitle`'s
+ * recent-record read is the only cross-process guard, and it only sees a
+ * duplicate that has already finished writing. A hard guarantee would
+ * need a database-level unique constraint, which Notion does not offer
+ * on this property.
+ */
+const inFlightSubmissions = new Map<string, Promise<{ proposal: Proposal; duplicate: boolean }>>();
+
+export async function submitProposal(
+  input: NewProposalInput,
+): Promise<{ proposal: Proposal; duplicate: boolean }> {
+  const title = input.title.trim();
+  if (!title) throw new Error("title required");
+  const key = title.toLowerCase();
+
+  const inFlight = inFlightSubmissions.get(key);
+  if (inFlight) return inFlight;
+
+  const task = (async () => {
+    const dup = await findRecentDuplicateTitle(title);
+    if (dup) return { proposal: dup, duplicate: true };
+    const proposal = await createProposal(input);
+    return { proposal, duplicate: false };
+  })();
+
+  inFlightSubmissions.set(key, task);
+  try {
+    return await task;
+  } finally {
+    inFlightSubmissions.delete(key);
+  }
 }
 
 export interface ReviewUpdateInput {

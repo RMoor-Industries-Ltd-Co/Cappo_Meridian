@@ -4,6 +4,7 @@ import {
   createProposal,
   findRecentDuplicateTitle,
   isProposalsConfigured,
+  submitProposal,
   updateProposalReview,
 } from "./proposals";
 
@@ -91,15 +92,15 @@ describe("proposals — Notion write layer", () => {
   describe("findRecentDuplicateTitle — retry/double-submit guard", () => {
     beforeEach(() => configureNotion());
 
-    it("finds a same-title record created moments ago", async () => {
+    it("finds a same-title record created moments ago, keyed on Notion's system created_time", async () => {
       dataSourcesQuery.mockResolvedValue({
         results: [
           {
             id: "existing",
             url: "https://notion.so/existing",
+            created_time: new Date().toISOString(),
             properties: {
               Title: { title: [{ plain_text: "Duplicate Me" }] },
-              Created: { date: { start: new Date().toISOString() } },
             },
           },
         ],
@@ -110,15 +111,35 @@ describe("proposals — Notion write layer", () => {
       expect(dup?.notionId).toBe("existing");
     });
 
+    it("still catches a recent duplicate even when the manual 'Created' property is blank — the exact gap being fixed", async () => {
+      dataSourcesQuery.mockResolvedValue({
+        results: [
+          {
+            id: "existing-no-manual-date",
+            url: "https://notion.so/existing-no-manual-date",
+            created_time: new Date().toISOString(),
+            properties: {
+              Title: { title: [{ plain_text: "No Manual Date" }] },
+              // No "Created" property on this row at all.
+            },
+          },
+        ],
+        next_cursor: null,
+      });
+
+      const dup = await findRecentDuplicateTitle("no manual date");
+      expect(dup?.notionId).toBe("existing-no-manual-date");
+    });
+
     it("does not flag a same-title record created long ago", async () => {
       dataSourcesQuery.mockResolvedValue({
         results: [
           {
             id: "old",
             url: "https://notion.so/old",
+            created_time: "2020-01-01T00:00:00.000Z",
             properties: {
               Title: { title: [{ plain_text: "Old Idea" }] },
-              Created: { date: { start: "2020-01-01T00:00:00.000Z" } },
             },
           },
         ],
@@ -131,6 +152,54 @@ describe("proposals — Notion write layer", () => {
     it("returns null when no title matches", async () => {
       dataSourcesQuery.mockResolvedValue({ results: [], next_cursor: null });
       expect(await findRecentDuplicateTitle("nothing here")).toBeNull();
+    });
+  });
+
+  describe("submitProposal — concurrent-request coalescing", () => {
+    beforeEach(() => configureNotion());
+
+    it("two simultaneous submissions of the identical title result in exactly one Notion page create", async () => {
+      dataSourcesQuery.mockResolvedValue({ results: [], next_cursor: null });
+      pagesCreate.mockResolvedValue({ id: "created-once", url: "https://notion.so/created-once", properties: {} });
+
+      // Fired back-to-back, with neither awaited first — the in-flight map
+      // entry for this title is set synchronously inside submitProposal
+      // before either call's first `await` yields, so the second call sees
+      // the first's in-flight promise already registered and joins it
+      // rather than racing it with its own independent read-then-create.
+      const first = submitProposal({ title: "Race Condition Idea" });
+      const second = submitProposal({ title: "race condition idea" }); // different case, same normalized key
+
+      const [a, b] = await Promise.all([first, second]);
+      expect(pagesCreate).toHaveBeenCalledTimes(1);
+      expect(a.proposal.notionId).toBe("created-once");
+      expect(b.proposal.notionId).toBe("created-once");
+      expect(a.duplicate).toBe(false);
+      expect(b.duplicate).toBe(false);
+    });
+
+    it("a second submission after the first has already landed is reported as a duplicate, not a second create", async () => {
+      dataSourcesQuery.mockResolvedValue({ results: [], next_cursor: null });
+      pagesCreate.mockResolvedValue({ id: "landed", url: "https://notion.so/landed", properties: {} });
+
+      await submitProposal({ title: "Sequential Idea" });
+
+      // Now the "database" has the record — a fresh query reflects it.
+      dataSourcesQuery.mockResolvedValue({
+        results: [
+          {
+            id: "landed",
+            url: "https://notion.so/landed",
+            created_time: new Date().toISOString(),
+            properties: { Title: { title: [{ plain_text: "Sequential Idea" }] } },
+          },
+        ],
+        next_cursor: null,
+      });
+
+      const result = await submitProposal({ title: "Sequential Idea" });
+      expect(result.duplicate).toBe(true);
+      expect(pagesCreate).toHaveBeenCalledTimes(1);
     });
   });
 

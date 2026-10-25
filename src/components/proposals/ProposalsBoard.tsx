@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ClipboardList, ExternalLink, Plus, RefreshCw, X } from "lucide-react";
+import { CheckCircle2, ClipboardList, ExternalLink, Pencil, Plus, RefreshCw, X } from "lucide-react";
 import { Card, SectionTitle } from "@/components/ui/Card";
 
 interface Proposal {
@@ -20,6 +20,7 @@ interface Proposal {
   driveLink: string | null;
   notes: string;
   created: string | null;
+  createdManual: string | null;
 }
 
 interface Tabs {
@@ -42,6 +43,7 @@ const TAB_META: { id: TabId; label: string; blurb: string }[] = [
 ];
 
 const CAPTURE_TYPES = ["Idea", "Product", "Terminology", "Task", "Document"];
+const DECISIONS = ["Approved Direction", "Revision Requested", "Deferred", "Rejected"] as const;
 
 const inputCls =
   "w-full rounded-lg border border-border bg-panel px-3 py-2 text-sm text-fg placeholder:text-subtle focus:outline-none";
@@ -62,6 +64,248 @@ const decisionTone = (decision: string) => {
 
 const fmtDate = (iso: string | null) =>
   iso ? new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "—";
+
+/**
+ * The governance boundary the directive requires stated explicitly next to
+ * every place a decision is recorded or edited — "Approved Direction" is a
+ * direction signal only, never itself the authorization for anything else.
+ */
+function GovernanceNote() {
+  return (
+    <p className="rounded-lg border border-gold/30 bg-gold/5 p-2.5 text-xs text-subtle">
+      <strong className="text-gold">Governance:</strong> Approved Direction records Founder alignment on
+      direction only. It does not authorize development, merging, deployment, spending, or publication —
+      each of those requires its own separate approval.
+    </p>
+  );
+}
+
+async function patchProposal(
+  notionId: string,
+  body: Record<string, string>,
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const res = await fetch(`/api/proposals/${notionId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const result = await res.json().catch(() => ({}));
+    if (!res.ok) return { ok: false, error: result.error || "Could not save" };
+    return { ok: true };
+  } catch {
+    return { ok: false, error: "Could not reach the server" };
+  }
+}
+
+function ProposalRow({
+  proposal: p,
+  tab,
+  onChanged,
+}: {
+  proposal: Proposal;
+  tab: TabId;
+  onChanged: () => void;
+}) {
+  const [action, setAction] = useState<null | "start-review" | "record-decision" | "edit-review">(null);
+  const [reviewOwnerInput, setReviewOwnerInput] = useState(p.reviewOwner);
+  const [decisionInput, setDecisionInput] = useState(p.decision || "");
+  const [rationaleInput, setRationaleInput] = useState(p.decisionRationale);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
+
+  function openAction(next: typeof action) {
+    setError(null);
+    setSuccess(false);
+    setReviewOwnerInput(p.reviewOwner);
+    setDecisionInput(p.decision || "");
+    setRationaleInput(p.decisionRationale);
+    setAction(action === next ? null : next);
+  }
+
+  async function startReview() {
+    setBusy(true);
+    setError(null);
+    const result = await patchProposal(p.notionId, {
+      reviewStatus: "In Review",
+      ...(reviewOwnerInput.trim() ? { reviewOwner: reviewOwnerInput.trim() } : {}),
+    });
+    setBusy(false);
+    if (!result.ok) {
+      setError(result.error ?? "Could not start review");
+      return;
+    }
+    setSuccess(true);
+    onChanged();
+  }
+
+  async function recordOrEditDecision() {
+    if (!decisionInput || !rationaleInput.trim()) return;
+    setBusy(true);
+    setError(null);
+    const result = await patchProposal(p.notionId, {
+      reviewStatus: "Reviewed",
+      decision: decisionInput,
+      decisionRationale: rationaleInput.trim(),
+      ...(reviewOwnerInput.trim() ? { reviewOwner: reviewOwnerInput.trim() } : {}),
+    });
+    setBusy(false);
+    if (!result.ok) {
+      setError(result.error ?? "Could not save the decision");
+      return;
+    }
+    setSuccess(true);
+    onChanged();
+  }
+
+  return (
+    <li className="flex flex-col gap-1.5 py-3">
+      <div className="flex items-center justify-between gap-2">
+        <a
+          href={p.url}
+          target="_blank"
+          rel="noreferrer"
+          className="flex min-w-0 items-center gap-1.5 truncate text-sm font-medium text-fg hover:text-gold"
+        >
+          {p.title || "Untitled"} <ExternalLink size={12} className="shrink-0 text-subtle" />
+        </a>
+        <div className="flex shrink-0 items-center gap-2">
+          {p.type && <span className="text-xs text-subtle">{p.type}</span>}
+          {tab === "ideas" && (
+            <button
+              onClick={() => openAction("start-review")}
+              className="rounded-md border border-border-strong bg-panel px-2 py-1 text-xs text-fg hover:bg-gold/10"
+            >
+              Start Review
+            </button>
+          )}
+          {tab === "overview" && (
+            <button
+              onClick={() => openAction("record-decision")}
+              className="rounded-md border border-border-strong bg-panel px-2 py-1 text-xs text-fg hover:bg-gold/10"
+            >
+              Record Decision
+            </button>
+          )}
+          {tab === "reviewed" && (
+            <button
+              onClick={() => openAction("edit-review")}
+              className="flex items-center gap-1 rounded-md border border-border-strong bg-panel px-2 py-1 text-xs text-fg hover:bg-gold/10"
+            >
+              <Pencil size={11} /> Edit Review
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2 text-xs text-subtle">
+        {p.submittedBy && <span>Submitted by {p.submittedBy}</span>}
+        {p.created && <span>· {fmtDate(p.created)}</span>}
+        {p.reviewOwner && <span>· Owner: {p.reviewOwner}</span>}
+      </div>
+
+      {tab === "reviewed" && (
+        <div className="mt-1 rounded-lg border border-border bg-[var(--bg-elevated)]/40 p-2.5">
+          <p className={`text-sm font-semibold ${decisionTone(p.decision)}`}>{p.decision || "Pending"}</p>
+          {p.decisionRationale && <p className="mt-1 text-xs text-subtle">{p.decisionRationale}</p>}
+          <p className="mt-2 text-[11px] text-subtle">
+            Original Notion record:{" "}
+            <a href={p.url} target="_blank" rel="noreferrer" className="text-gold hover:underline">
+              {p.url}
+            </a>
+          </p>
+        </div>
+      )}
+
+      {action === "start-review" && (
+        <Card gold className="mt-1 flex flex-col gap-2 p-3">
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-semibold text-fg">Start formal review</p>
+            <button onClick={() => setAction(null)} className="text-subtle hover:text-fg">
+              <X size={13} />
+            </button>
+          </div>
+          <input
+            value={reviewOwnerInput}
+            onChange={(e) => setReviewOwnerInput(e.target.value)}
+            placeholder="Review owner (optional)…"
+            className={inputCls}
+          />
+          {error && <p className="text-xs text-neg">{error}</p>}
+          {success && (
+            <p className="flex items-center gap-1 text-xs text-pos">
+              <CheckCircle2 size={13} /> Moved to Overview.
+            </p>
+          )}
+          <div className="flex justify-end">
+            <button
+              onClick={startReview}
+              disabled={busy}
+              className="rounded-md btn-gold px-3 py-1.5 text-xs disabled:opacity-50"
+            >
+              {busy ? "Saving…" : "Begin Review"}
+            </button>
+          </div>
+        </Card>
+      )}
+
+      {(action === "record-decision" || action === "edit-review") && (
+        <Card gold className="mt-1 flex flex-col gap-2 p-3">
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-semibold text-fg">
+              {action === "edit-review" ? "Edit recorded decision" : "Record decision"}
+            </p>
+            <button onClick={() => setAction(null)} className="text-subtle hover:text-fg">
+              <X size={13} />
+            </button>
+          </div>
+          <GovernanceNote />
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <select
+              value={decisionInput}
+              onChange={(e) => setDecisionInput(e.target.value)}
+              className={inputCls}
+            >
+              <option value="">Decision…</option>
+              {DECISIONS.map((d) => (
+                <option key={d} value={d}>{d}</option>
+              ))}
+            </select>
+            <input
+              value={reviewOwnerInput}
+              onChange={(e) => setReviewOwnerInput(e.target.value)}
+              placeholder="Review owner…"
+              className={inputCls}
+            />
+          </div>
+          <textarea
+            value={rationaleInput}
+            onChange={(e) => setRationaleInput(e.target.value)}
+            placeholder="Decision rationale (required)…"
+            rows={2}
+            className={inputCls}
+          />
+          {error && <p className="text-xs text-neg">{error}</p>}
+          {success && (
+            <p className="flex items-center gap-1 text-xs text-pos">
+              <CheckCircle2 size={13} /> Saved.
+            </p>
+          )}
+          <div className="flex justify-end">
+            <button
+              onClick={recordOrEditDecision}
+              disabled={busy || !decisionInput || !rationaleInput.trim()}
+              className="rounded-md btn-gold px-3 py-1.5 text-xs disabled:opacity-50"
+            >
+              {busy ? "Saving…" : action === "edit-review" ? "Save Correction" : "Save Decision"}
+            </button>
+          </div>
+        </Card>
+      )}
+    </li>
+  );
+}
 
 export function ProposalsBoard() {
   const [tab, setTab] = useState<TabId>("ideas");
@@ -119,7 +363,7 @@ export function ProposalsBoard() {
     setNonce((n) => n + 1);
   }
 
-  async function submitProposal() {
+  async function submitNewProposal() {
     if (!title.trim() || busy) return;
     setBusy(true);
     setFormError(null);
@@ -266,7 +510,7 @@ export function ProposalsBoard() {
           {formError && <p className="text-sm text-neg">{formError}</p>}
           <div className="flex justify-end">
             <button
-              onClick={submitProposal}
+              onClick={submitNewProposal}
               disabled={!title.trim() || busy}
               className="rounded-lg btn-gold px-4 py-2 text-sm disabled:opacity-50"
             >
@@ -324,34 +568,7 @@ export function ProposalsBoard() {
         ) : (
           <ul className="flex flex-col divide-y divide-border">
             {list.map((p) => (
-              <li key={p.notionId} className="flex flex-col gap-1.5 py-3">
-                <div className="flex items-center justify-between gap-2">
-                  <a
-                    href={p.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="flex min-w-0 items-center gap-1.5 truncate text-sm font-medium text-fg hover:text-gold"
-                  >
-                    {p.title || "Untitled"} <ExternalLink size={12} className="shrink-0 text-subtle" />
-                  </a>
-                  {p.type && <span className="shrink-0 text-xs text-subtle">{p.type}</span>}
-                </div>
-                <div className="flex flex-wrap items-center gap-2 text-xs text-subtle">
-                  {p.submittedBy && <span>Submitted by {p.submittedBy}</span>}
-                  {p.created && <span>· {fmtDate(p.created)}</span>}
-                  {p.reviewOwner && <span>· Owner: {p.reviewOwner}</span>}
-                </div>
-                {tab === "reviewed" && (
-                  <div className="mt-1 rounded-lg border border-border bg-[var(--bg-elevated)]/40 p-2.5">
-                    <p className={`text-sm font-semibold ${decisionTone(p.decision)}`}>
-                      {p.decision || "Pending"}
-                    </p>
-                    {p.decisionRationale && (
-                      <p className="mt-1 text-xs text-subtle">{p.decisionRationale}</p>
-                    )}
-                  </div>
-                )}
-              </li>
+              <ProposalRow key={p.notionId} proposal={p} tab={tab} onChanged={refresh} />
             ))}
           </ul>
         )}

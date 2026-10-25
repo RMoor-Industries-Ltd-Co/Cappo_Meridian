@@ -7,8 +7,8 @@ import {
   type Proposal,
 } from "./proposals";
 
-function row(properties: NRow["properties"]): NRow {
-  return { id: "row-1", url: "https://notion.so/row-1", properties };
+function row(properties: NRow["properties"], created_time?: string): NRow {
+  return { id: "row-1", url: "https://notion.so/row-1", created_time, properties };
 }
 
 function makeProposal(overrides: Partial<Proposal> = {}): Proposal {
@@ -30,6 +30,7 @@ function makeProposal(overrides: Partial<Proposal> = {}): Proposal {
     domainIds: [],
     relatedInitiativeIds: [],
     created: "2026-01-01T00:00:00.000Z",
+    createdManual: null,
     ...overrides,
   };
 }
@@ -51,6 +52,7 @@ describe("mapProposal — real Notion-row parsing against the live Capture/Ideas
         Brand: { relation: [{ id: "brand-1" }] },
         Domain: { relation: [{ id: "domain-1" }] },
         "Related Initiative": { relation: [] },
+        Created: { date: { start: "2026-02-14" } },
       }),
     );
     expect(mapped.notionId).toBe("row-1");
@@ -62,6 +64,7 @@ describe("mapProposal — real Notion-row parsing against the live Capture/Ideas
     expect(mapped.sourcePage).toBe("https://app.notion.com/p/402e4a15");
     expect(mapped.driveLink).toBeNull();
     expect(mapped.brandIds).toEqual(["brand-1"]);
+    expect(mapped.createdManual).toBe("2026-02-14");
   });
 
   it("a row with no Review Status set maps to an empty string, never a fabricated value", () => {
@@ -75,6 +78,32 @@ describe("mapProposal — real Notion-row parsing against the live Capture/Ideas
     const mapped = mapProposal(row({ Status: { select: { name: "Inbox" } } }));
     expect(mapped.title).toBe("");
     expect(mapped.notionId).toBe("row-1");
+  });
+
+  it("`created` comes from Notion's system created_time, not a manually-entered field — present even when no such property exists on the row", () => {
+    const mapped = mapProposal(
+      row({ Title: { title: [{ plain_text: "No manual Created property at all" }] } }, "2026-03-01T12:00:00.000Z"),
+    );
+    expect(mapped.created).toBe("2026-03-01T12:00:00.000Z");
+  });
+
+  it("`created` is null only when Notion itself didn't report created_time (never fabricated)", () => {
+    const mapped = mapProposal(row({ Title: { title: [{ plain_text: "X" }] } }));
+    expect(mapped.created).toBeNull();
+  });
+
+  it("the manual 'Created' property is preserved independently as createdManual, and is null (not fabricated) when blank — the exact case the duplicate guard no longer depends on", () => {
+    const withManual = mapProposal(
+      row({ Title: { title: [{ plain_text: "X" }], }, Created: { date: { start: "2025-12-25" } } }, "2026-03-01T12:00:00.000Z"),
+    );
+    expect(withManual.createdManual).toBe("2025-12-25");
+    expect(withManual.created).toBe("2026-03-01T12:00:00.000Z");
+
+    const blankManual = mapProposal(
+      row({ Title: { title: [{ plain_text: "Y" }] } }, "2026-03-01T12:00:00.000Z"),
+    );
+    expect(blankManual.createdManual).toBeNull();
+    expect(blankManual.created).toBe("2026-03-01T12:00:00.000Z");
   });
 });
 
