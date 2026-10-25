@@ -1,19 +1,20 @@
 import {
   LayoutDashboard,
   CalendarDays,
-  Flag,
+  ClipboardList,
+  ShoppingBag,
   GraduationCap,
   Sparkles,
   Boxes,
   PhoneCall,
   Wallet,
+  Landmark,
   BookText,
   Scale,
   Mail,
   HardDrive,
   BookOpen,
   Video,
-  Landmark,
   type LucideIcon,
 } from "lucide-react";
 
@@ -27,16 +28,17 @@ export interface NavItem {
   highlight?: boolean;
 }
 
-/** The ten business-operation functions, in rail order. */
+/** The business-operation functions, in rail order. */
 export const NAV_ITEMS: NavItem[] = [
   { href: "/", label: "Overview", icon: LayoutDashboard, blurb: "Company-wide pulse from the AMG ClickUp space, by quarter." },
+  { href: "/proposals", label: "Proposals", icon: ClipboardList, blurb: "Idea intake, governance review, and proposal decisions." },
   { href: "/meetings", label: "Meetings", icon: Video, blurb: "Transcribed & logged conversations — Fathom, Gemini, Calendly, ClickUp, and Notion, in one index.", highlight: true },
   { href: "/calendar", label: "Calendar", icon: CalendarDays, blurb: "Schedule across the team — month, week, and day." },
-  { href: "/campaigns", label: "Campaigns", icon: Flag, blurb: "Marketing and Sales — campaigns, pipeline, content, and revenue." },
+  { href: "/commerce-operations", label: "Commerce Operations", icon: ShoppingBag, blurb: "Marketing, Sales, and Promotions — campaigns, pipeline, content, and revenue." },
   { href: "/ai", label: "AI", icon: Sparkles, blurb: "AI research workspace — switch between Claude and GPT." },
   { href: "/inventory", label: "Inventory", icon: Boxes, blurb: "Stock levels, SKUs, and supply tracking." },
   { href: "/contact-center", label: "Contact Center", icon: PhoneCall, blurb: "Outbound call console for suppliers, wholesalers & contractors — scripts, capture, outcomes." },
-  { href: "/budget", label: "Budget", icon: Wallet, blurb: "Spend, forecasts, and financial health." },
+  { href: "/financials", label: "Financials", icon: Wallet, blurb: "Accounts, transactions, contributions, revenue, expenses, budgets, forecasting, and reports." },
   { href: "/grantops", label: "GrantOps", icon: Landmark, blurb: "Funding Command Center — research, score, and prepare grant & funding applications with CAPPO governance and ALLIE prep. Human approval before any submission." },
   { href: "/operations", label: "Operations", icon: BookText, blurb: "Live AMG structure, current work swim lanes, and meeting notes." },
   { href: "/drive", label: "Drive", icon: HardDrive, blurb: "Browse and manage the AMG Google Drive — files & folders." },
